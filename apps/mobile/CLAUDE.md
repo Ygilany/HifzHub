@@ -198,934 +198,151 @@ apps/mobile/
 
 ### 1. Authentication Flow
 
-**Auth Context** (`lib/auth/context.tsx`):
-```typescript
-import { createContext, useContext, useState, useEffect } from 'react';
-import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import { api } from '../trpc/client';
+**Setup:**
+- Auth context in `lib/auth/context.tsx` with React Context
+- Token stored in `expo-secure-store` (encrypted on-device storage)
+- Role-based navigation: redirects to `/(teacher)`, `/(student)`, or `/(parent)` after login
+- Root layout wraps app with AuthProvider and TRPCProvider
 
-interface AuthContextValue {
-  user: User | null;
-  isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const signInMutation = api.auth.signIn.useMutation({
-    onSuccess: async (data) => {
-      await SecureStore.setItemAsync('token', data.token);
-      setUser(data.user);
-      router.replace(`/(${data.user.role.toLowerCase()})`);
-    },
-  });
-
-  const signIn = async (email: string, password: string) => {
-    await signInMutation.mutateAsync({ email, password });
-  };
-
-  const signOut = async () => {
-    await SecureStore.deleteItemAsync('token');
-    setUser(null);
-    router.replace('/(auth)/login');
-  };
-
-  useEffect(() => {
-    // Check for existing token on mount
-    SecureStore.getItemAsync('token').then((token) => {
-      if (token) {
-        // Validate token and fetch user
-        api.auth.me.query().then(setUser);
-      }
-      setIsLoading(false);
-    });
-  }, []);
-
-  return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
-```
-
-**Root Layout with Auth** (`app/_layout.tsx`):
-```typescript
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { TRPCProvider } from '@/lib/trpc/provider';
-import { AuthProvider } from '@/lib/auth/context';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
-  return (
-    <TRPCProvider>
-      <AuthProvider>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(teacher)" />
-          <Stack.Screen name="(student)" />
-          <Stack.Screen name="(parent)" />
-        </Stack>
-      </AuthProvider>
-    </TRPCProvider>
-  );
-}
-```
+**Key hooks:**
+- `useAuth()` - Access user, signIn, signOut
+- Token automatically injected into tRPC headers
 
 ### 2. Teacher Session Recording
 
-**Quick Session Recording** (`app/(teacher)/sessions/new.tsx`):
-```typescript
-import { useState } from 'react';
-import { ScrollView } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { api } from '@/lib/trpc/client';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Text } from '@/components/ui/text';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AttendanceSelector } from '@/components/sessions/attendance-selector';
-import { MistakeCounter } from '@/components/sessions/mistake-counter';
-import { AssignmentForm } from '@/components/forms/assignment-form';
-import { useToast } from '@/components/ui/toast';
+**Screen structure:**
+- ScrollView with Card-based layout
+- Student info header
+- Attendance selector (radio group)
+- Assignment forms (3 types: NEW_LESSON, NEAREST_REVIEW, GENERAL_REVIEW)
+- Mistake counter
+- Notes textarea
+- Submit button with loading state
 
-export default function NewSessionScreen() {
-  const { studentId } = useLocalSearchParams();
-  const [attendance, setAttendance] = useState('PRESENT');
-  const [mistakes, setMistakes] = useState(0);
-  const [assignments, setAssignments] = useState([]);
-  const [notes, setNotes] = useState('');
-  const { toast } = useToast();
-
-  const student = api.student.getById.useQuery({ id: studentId as string });
-  const createSession = api.session.create.useMutation({
-    onSuccess: () => {
-      toast({ title: 'Success', description: 'Session recorded successfully' });
-      router.back();
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  const handleSubmit = () => {
-    createSession.mutate({
-      studentId: studentId as string,
-      attendance,
-      mistakes,
-      assignments,
-      notes,
-    });
-  };
-
-  if (student.isLoading) return <LoadingSpinner />;
-
-  return (
-    <ScrollView className="flex-1 bg-background">
-      <View className="p-4 gap-6">
-        {/* Student Header */}
-        <Card>
-          <CardContent className="pt-6">
-            <Text className="text-xl font-bold">{student.data?.name}</Text>
-            <Text className="text-muted-foreground">{student.data?.class.name}</Text>
-          </CardContent>
-        </Card>
-
-        {/* Attendance */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Attendance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AttendanceSelector value={attendance} onChange={setAttendance} />
-          </CardContent>
-        </Card>
-
-        {/* Assignments */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Assignments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AssignmentForm
-              types={['NEW_LESSON', 'NEAREST_REVIEW', 'GENERAL_REVIEW']}
-              value={assignments}
-              onChange={setAssignments}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Mistakes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Mistakes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MistakeCounter value={mistakes} onChange={setMistakes} />
-          </CardContent>
-        </Card>
-
-        {/* Notes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Input
-              multiline
-              numberOfLines={4}
-              placeholder="Session notes..."
-              value={notes}
-              onChangeText={setNotes}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Submit Button */}
-        <Button
-          onPress={handleSubmit}
-          disabled={createSession.isPending}
-        >
-          <Text>{createSession.isPending ? 'Saving...' : 'Record Session'}</Text>
-        </Button>
-      </View>
-    </ScrollView>
-  );
-}
-```
+**Components:** Uses React Native Reusables (Card, Button, Input, Text)
 
 ### 3. Student Assignment View
 
-**Student Dashboard** (`app/(student)/index.tsx`):
-```typescript
-import { ScrollView, RefreshControl } from 'react-native';
-import { api } from '@/lib/trpc/client';
-import { useAuth } from '@/lib/auth/hooks';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Text } from '@/components/ui/text';
-import { Progress } from '@/components/ui/progress';
-import { AssignmentCard } from '@/components/students/assignment-card';
-import { router } from 'expo-router';
-
-export default function StudentDashboardScreen() {
-  const { user } = useAuth();
-  const assignments = api.assignment.getMy.useQuery();
-  const progress = api.student.getProgress.useQuery();
-
-  return (
-    <ScrollView
-      className="flex-1 bg-background"
-      refreshControl={
-        <RefreshControl
-          refreshing={assignments.isRefetching}
-          onRefresh={() => assignments.refetch()}
-        />
-      }
-    >
-      <View className="p-4 gap-6">
-        {/* Welcome Header */}
-        <View>
-          <Text className="text-2xl font-bold">
-            As-Salamu Alaykum, {user?.name}
-          </Text>
-          <Text className="text-muted-foreground">
-            Continue your Hifz journey
-          </Text>
-        </View>
-
-        {/* Progress Overview */}
-        {progress.data && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="gap-4">
-              <View>
-                <View className="flex-row justify-between mb-2">
-                  <Text>Pages Memorized</Text>
-                  <Text>{progress.data.pagesMemorized} / 604</Text>
-                </View>
-                <Progress 
-                  value={(progress.data.pagesMemorized / 604) * 100} 
-                  className="h-2"
-                />
-              </View>
-              
-              <View className="flex-row justify-between">
-                <View>
-                  <Text className="text-2xl font-bold">
-                    {progress.data.currentJuz}
-                  </Text>
-                  <Text className="text-muted-foreground">Current Juz</Text>
-                </View>
-                <View>
-                  <Text className="text-2xl font-bold">
-                    {progress.data.streak}
-                  </Text>
-                  <Text className="text-muted-foreground">Day Streak</Text>
-                </View>
-              </View>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Current Assignments */}
-        <View>
-          <Text className="text-xl font-bold mb-2">Current Assignments</Text>
-          <View className="gap-4">
-            {assignments.data?.map((assignment) => (
-              <AssignmentCard
-                key={assignment.id}
-                assignment={assignment}
-                onComplete={() => {
-                  api.assignment.markComplete.mutate({ id: assignment.id });
-                }}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="gap-2">
-            <Button
-              variant="outline"
-              onPress={() => router.push('/(student)/quran')}
-            >
-              <Text>Open Quran</Text>
-            </Button>
-            <Button
-              variant="outline"
-              onPress={() => router.push('/(student)/progress')}
-            >
-              <Text>View Progress</Text>
-            </Button>
-          </CardContent>
-        </Card>
-      </View>
-    </ScrollView>
-  );
-}
-```
+**Dashboard features:**
+- Pull-to-refresh for assignments
+- Progress overview (pages memorized, current juz, streak)
+- Assignment cards with completion actions
+- Quick action buttons (Open Quran, View Progress)
+- Personalized greeting
 
 ### 4. Quran Viewer with Annotations
 
-**Quran Viewer Screen** (`app/(student)/quran.tsx`):
-```typescript
-import { useState } from 'react';
-import { View, ScrollView } from 'react-native';
-import { api } from '@/lib/trpc/client';
-import { QuranViewer } from '@/components/quran/quran-viewer';
-import { SurahPicker } from '@/components/quran/surah-picker';
-import { AudioControls } from '@/components/quran/audio-controls';
-import { AnnotationLayer } from '@/components/quran/annotation-layer';
-
-export default function QuranViewerScreen() {
-  const [surah, setSurah] = useState(1);
-  const [page, setPage] = useState(1);
-  
-  const quranText = api.quran.getText.useQuery({ surah, page });
-  const annotations = api.annotation.getForPage.useQuery({ surah, page });
-
-  return (
-    <View className="flex-1 bg-background">
-      {/* Header with Surah Picker */}
-      <SurahPicker
-        currentSurah={surah}
-        onSelect={setSurah}
-      />
-
-      {/* Quran Text with Annotations */}
-      <ScrollView className="flex-1">
-        <QuranViewer
-          text={quranText.data}
-          annotations={annotations.data}
-          onAyahPress={(ayah) => {
-            // Show ayah details
-          }}
-        />
-      </ScrollView>
-
-      {/* Audio Controls */}
-      <AudioControls
-        surah={surah}
-        onPlay={() => {}}
-        onPause={() => {}}
-      />
-    </View>
-  );
-}
-```
+**Features:**
+- Surah/page picker for navigation
+- ScrollView with Quran text and teacher annotations overlay
+- Audio controls for recitation
+- Ayah tap handlers for details
 
 ### 5. Tab Navigation
 
-**Teacher Tabs Layout** (`app/(teacher)/_layout.tsx`):
-```typescript
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export default function TeacherLayout() {
-  const colorScheme = useColorScheme();
-
-  return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: colorScheme === 'dark' ? '#fff' : '#000',
-        tabBarStyle: {
-          backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#fff',
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="classes"
-        options={{
-          title: 'Classes',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
-  );
-}
-```
+**Role-based tabs:**
+- Each role has separate tab layout: `(teacher)`, `(student)`, `(parent)`
+- Theme-aware tab bar colors
+- Ionicons for tab icons
+- Configured in `_layout.tsx` for each route group
 
 ## NativeWind Styling
 
-### Configuration (`tailwind.config.js`):
-```javascript
-module.exports = {
-  content: [
-    './app/**/*.{js,jsx,ts,tsx}',
-    './components/**/*.{js,jsx,ts,tsx}',
-  ],
-  presets: [require('nativewind/preset')],
-  theme: {
-    extend: {
-      colors: {
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        // ... RNR color tokens
-      },
-    },
-  },
-  plugins: [],
-};
-```
+- **NativeWind v4**: Tailwind CSS for React Native with `className` prop
+- **Configuration**: `tailwind.config.js` with NativeWind preset
+- **Theme**: HSL-based color tokens matching web (background, foreground, primary, etc.)
+- **Usage**: Apply Tailwind classes directly: `className="bg-card p-4 rounded-lg"`
 
-### Using NativeWind:
-```typescript
-import { View, Text } from 'react-native';
-
-export function Card({ children }) {
-  return (
-    <View className="bg-card p-4 rounded-lg shadow-sm">
-      <Text className="text-lg font-semibold text-foreground">
-        {children}
-      </Text>
-    </View>
-  );
-}
-```
+See [NativeWind docs](https://www.nativewind.dev) for complete API.
 
 ## React Native Reusables
 
-React Native Reusables provides accessible, pre-built components styled with NativeWind. These components are based on shadcn/ui but adapted for React Native.
+Pre-built accessible components styled with NativeWind (shadcn/ui for React Native).
 
-### Installation:
-```bash
-# From apps/mobile directory
-npx @react-native-reusables/cli@latest init
+**Installation:** `npx @react-native-reusables/cli@latest add <component>`
 
-# Add specific components
-npx @react-native-reusables/cli@latest add button
-npx @react-native-reusables/cli@latest add card
-npx @react-native-reusables/cli@latest add input
-npx @react-native-reusables/cli@latest add select
-npx @react-native-reusables/cli@latest add dialog
-```
+**Key components:** Button, Card, Input, Text, Select, Dialog, Avatar, Badge, Progress, Switch, Checkbox
 
-### Using RNR Components:
-```typescript
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Text } from '@/components/ui/text';
+**Important:** Always use RNR's `Text` component, not React Native's, for consistent styling.
 
-export function SessionForm() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Record Session</CardTitle>
-      </CardHeader>
-      <CardContent className="gap-4">
-        <Input placeholder="Student name" />
-        <Button onPress={() => {}}>
-          <Text>Save Session</Text>
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-```
-
-### Available RNR Components:
-- **Button**: Primary, secondary, outline, ghost variants
-- **Card**: Container with header, content, footer sections
-- **Input**: Text input with label and error states
-- **Text**: Typography with size and color variants
-- **Select**: Native picker with consistent styling
-- **Dialog**: Modal dialogs and bottom sheets
-- **Avatar**: User profile images with fallback
-- **Badge**: Status indicators and labels
-- **Progress**: Progress bars and indicators
-- **Separator**: Horizontal and vertical dividers
-- **Switch**: Toggle switches
-- **Checkbox**: Checkboxes with labels
-- **RadioGroup**: Radio button groups
-
-### Theming with RNR:
-```typescript
-// lib/theme.ts
-export const theme = {
-  light: {
-    background: 'hsl(0 0% 100%)',
-    foreground: 'hsl(240 10% 3.9%)',
-    primary: 'hsl(240 5.9% 10%)',
-    // ... more colors
-  },
-  dark: {
-    background: 'hsl(240 10% 3.9%)',
-    foreground: 'hsl(0 0% 98%)',
-    primary: 'hsl(0 0% 98%)',
-    // ... more colors
-  },
-};
-
-// Apply theme in root layout
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { setAndroidNavigationBar } from '@/lib/android-navigation-bar';
-
-export default function RootLayout() {
-  const { colorScheme } = useColorScheme();
-  
-  useEffect(() => {
-    setAndroidNavigationBar(colorScheme);
-  }, [colorScheme]);
-
-  return <Slot />;
-}
-```
+See [RNR docs](https://rnr-docs.vercel.app) for full component API.
 
 ## tRPC Integration
 
-**tRPC Provider** (`lib/trpc/provider.tsx`):
-```typescript
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { httpBatchLink } from '@trpc/client';
-import { useState } from 'react';
-import { api } from './client';
-import * as SecureStore from 'expo-secure-store';
-
-export function TRPCProvider({ children }) {
-  const [queryClient] = useState(() => new QueryClient());
-  const [trpcClient] = useState(() =>
-    api.createClient({
-      links: [
-        httpBatchLink({
-          url: process.env.EXPO_PUBLIC_API_URL!,
-          async headers() {
-            const token = await SecureStore.getItemAsync('token');
-            return token ? { authorization: `Bearer ${token}` } : {};
-          },
-        }),
-      ],
-    })
-  );
-
-  return (
-    <api.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </api.Provider>
-  );
-}
-```
+**Setup:** Provider in `lib/trpc/provider.tsx` wraps app with React Query + tRPC client
+- `httpBatchLink` for request batching
+- Token from SecureStore automatically injected into headers
+- All procedures accessed via `api.router.procedure.useQuery()` or `.useMutation()`
 
 ## Offline Support
 
-**Offline Detection** (`hooks/use-offline.ts`):
-```typescript
-import { useEffect, useState } from 'react';
-import NetInfo from '@react-native-community/netinfo';
-
-export function useOffline() {
-  const [isOffline, setIsOffline] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOffline(!state.isConnected);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  return isOffline;
-}
-```
-
-**Queue for Offline Actions**:
-```typescript
-// store/offline-queue.ts
-import create from 'zustand';
-import { persist } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface OfflineAction {
-  id: string;
-  type: 'createSession' | 'updateAssignment';
-  data: any;
-  timestamp: number;
-}
-
-export const useOfflineQueue = create(
-  persist(
-    (set, get) => ({
-      queue: [] as OfflineAction[],
-      addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp'>) => {
-        set((state) => ({
-          queue: [
-            ...state.queue,
-            {
-              ...action,
-              id: Date.now().toString(),
-              timestamp: Date.now(),
-            },
-          ],
-        }));
-      },
-      processQueue: async () => {
-        const { queue } = get();
-        // Process each action
-        for (const action of queue) {
-          try {
-            // Send to server
-            await api[action.type].mutate(action.data);
-            // Remove from queue
-            set((state) => ({
-              queue: state.queue.filter((a) => a.id !== action.id),
-            }));
-          } catch (error) {
-            console.error('Failed to process action:', error);
-          }
-        }
-      },
-    }),
-    {
-      name: 'offline-queue',
-      storage: AsyncStorage,
-    }
-  )
-);
-```
+**Detection:** `useOffline()` hook with `@react-native-community/netinfo`
+**Queue:** Zustand store with AsyncStorage persistence for offline mutations
+**Sync:** Process queue when connection restored
 
 ## Push Notifications
 
-**Setup** (`lib/notifications.ts`):
-```typescript
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-export async function registerForPushNotifications() {
-  if (!Device.isDevice) {
-    return null;
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    return null;
-  }
-
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  const token = await Notifications.getExpoPushTokenAsync({ projectId });
-  
-  return token.data;
-}
-```
+**Setup:** Expo Notifications with permission handling in `lib/notifications.ts`
+- Request permissions on device only (not simulator)
+- Get Expo push token
+- Configure notification handler
+- Register token with backend
 
 ## Build Configuration
 
-**EAS Build** (`eas.json`):
-```json
-{
-  "cli": {
-    "version": ">= 5.0.0"
-  },
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
-    "preview": {
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "android": {
-        "buildType": "aab"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
-  }
-}
-```
+**EAS Build** configured in `eas.json`:
+- **Development**: Dev client for debugging
+- **Preview**: Internal testing (APK for Android)
+- **Production**: Store-ready builds (AAB for Android)
 
-**Build Commands**:
-```bash
-# Development build
-eas build --profile development --platform ios
+**Commands:** `eas build --profile <profile> --platform <platform>`, `eas submit`
 
-# Preview build (internal testing)
-eas build --profile preview --platform android
+## Expo Configuration
 
-# Production build
-eas build --profile production --platform all
+**Key settings** in `app.json`:
+- App name, slug, scheme (`hifzhub://`)
+- Icons, splash screens, adaptive icons
+- Plugins: expo-router, expo-secure-store, expo-notifications
+- TypedRoutes experiment enabled
+- Bundle IDs: `com.hifzhub.app`
 
-# Submit to stores
-eas submit --platform ios
-eas submit --platform android
-```
+## Performance
 
-## Expo App Configuration
-
-**Key Settings** (`app.json`):
-```json
-{
-  "expo": {
-    "name": "HifzHub",
-    "slug": "hifzhub",
-    "scheme": "hifzhub",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
-    "icon": "./assets/images/icon.png",
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.hifzhub.app"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "com.hifzhub.app"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#ffffff"
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
-  }
-}
-```
-
-## Performance Optimizations
-
-### List Rendering:
-```typescript
-import { FlashList } from '@shopify/flash-list';
-
-<FlashList
-  data={students}
-  renderItem={({ item }) => <StudentCard student={item} />}
-  estimatedItemSize={100}
-  keyExtractor={(item) => item.id}
-/>
-```
-
-### Image Optimization:
-```typescript
-import { Image } from 'expo-image';
-
-<Image
-  source={{ uri: student.avatar }}
-  contentFit="cover"
-  transition={200}
-  style={{ width: 100, height: 100 }}
-/>
-```
-
-### Code Splitting:
-```typescript
-import { lazy, Suspense } from 'react';
-
-const QuranViewer = lazy(() => import('@/components/quran/quran-viewer'));
-
-<Suspense fallback={<Loading />}>
-  <QuranViewer />
-</Suspense>
-```
-
-## Testing
-
-```bash
-# Run tests
-pnpm test
-
-# E2E tests (Detox)
-pnpm test:e2e:ios
-pnpm test:e2e:android
-
-# Type checking
-pnpm typecheck
-```
+- **Lists**: Use FlashList for long lists (better than FlatList)
+- **Images**: Use `expo-image` for better caching and transitions
+- **Code splitting**: Lazy load heavy components with Suspense
 
 ## Environment Variables
 
 **Required in `.env`:**
-```bash
-EXPO_PUBLIC_API_URL="http://192.168.1.5:3000/api/trpc"  # Use local IP, not localhost
-EXPO_PUBLIC_APP_SCHEME="hifzhub"
-```
+- `EXPO_PUBLIC_API_URL` - tRPC endpoint (use local IP like `http://192.168.1.5:3000/api/trpc`, NOT localhost)
+- `EXPO_PUBLIC_APP_SCHEME` - Deep link scheme (`hifzhub`)
 
 ## Deployment
 
-### Development:
-```bash
-# Start Expo dev server
-pnpm dev
-
-# Run on device
-pnpm android
-pnpm ios
-```
-
-### Production:
-```bash
-# Build for production
-eas build --platform all
-
-# Submit to stores
-eas submit --platform all
-
-# Update OTA
-eas update --branch production
-```
+**Dev:** `pnpm dev`, then scan QR or `pnpm android/ios`
+**Production:** `eas build --platform all`, `eas submit --platform all`
+**OTA Updates:** `eas update --branch production`
 
 ## Best Practices
 
-1. **Use Expo Router for navigation** - File-based routing is cleaner
-2. **Secure sensitive data** - Use `expo-secure-store` for tokens
-3. **Optimize lists** - Use `FlashList` for long lists
-4. **Handle offline** - Queue actions when offline
-5. **Push notifications** - Keep users engaged
-6. **Type everything** - Leverage TypeScript
-7. **Test on real devices** - Simulators don't catch everything
-8. **Handle permissions** - Request permissions gracefully
-9. **Optimize images** - Use `expo-image` for better performance
-10. **Profile performance** - Use React DevTools Profiler
-11. **Use RNR components** - Pre-built, accessible, consistent styling
-12. **Follow RNR conventions** - Use Text component from RNR, not React Native
+1. Use Expo Router (file-based routing)
+2. Secure tokens with expo-secure-store
+3. FlashList for long lists
+4. Handle offline with queued mutations
+5. Test on real devices (simulators miss issues)
+6. Use RNR components for consistency
+7. Always use RNR `Text`, not React Native `Text`
+8. Request permissions gracefully
+9. Profile performance with React DevTools
 
 ## Troubleshooting
 
-**Metro bundler issues:**
-```bash
-pnpm start --clear
-```
+| Issue | Solution |
+|-------|----------|
+| Metro bundler issues | `pnpm start --clear` |
+| API not connecting | Use local IP in `EXPO_PUBLIC_API_URL`, not localhost; check web server running |
+| Build errors | `eas build --clear-cache` |
+| App crashes | Check Expo Go logs, use console.log, React DevTools |
 
-**API not connecting:**
-- Check `EXPO_PUBLIC_API_URL` uses your computer's local IP
-- Ensure web dev server is running
-- Check firewall settings
-
-**Build errors:**
-```bash
-eas build --clear-cache
-```
-
-**App crashes:**
-- Check error logs in Expo Go app
-- Use `console.log` for debugging
-- Check React DevTools
-
-For additional guidance, see the root `CLAUDE.md` file.
+See root `CLAUDE.md` for monorepo guidance.

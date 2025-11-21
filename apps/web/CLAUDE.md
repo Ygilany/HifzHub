@@ -191,563 +191,104 @@ apps/web/
 
 ### 1. Authentication Flow
 
-**NextAuth.js Configuration** (`lib/auth/config.ts`):
-```typescript
-import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import { db } from '@hifzhub/database';
-import { users } from '@hifzhub/database/schema';
-import { eq } from 'drizzle-orm';
-import { verifyPassword } from './utils';
+**Setup:** NextAuth.js v5 with DrizzleAdapter in `lib/auth/config.ts`
+- Credentials provider with email/password
+- JWT session strategy
+- Role stored in JWT token and session
+- Protected routes via middleware
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: DrizzleAdapter(db),
-  session: { strategy: 'jwt' },
-  providers: [
-    Credentials({
-      credentials: {
-        email: { type: 'email' },
-        password: { type: 'password' },
-      },
-      authorize: async (credentials) => {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, credentials.email as string))
-          .limit(1);
-        
-        if (!user || !await verifyPassword(credentials.password as string, user.passwordHash!)) {
-          return null;
-        }
-        
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
-      },
-    }),
-  ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        token.role = user.role;
-      }
-      return token;
-    },
-    session({ session, token }) {
-      session.user.role = token.role as string;
-      return session;
-    },
-  },
-});
-```
-
-**Protected Route Middleware** (`middleware.ts`):
-```typescript
-import { auth } from './lib/auth/config';
-import { NextResponse } from 'next/server';
-
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isAuthRoute = req.nextUrl.pathname.startsWith('/login');
-  const isDashboardRoute = req.nextUrl.pathname.startsWith('/dashboard');
-
-  if (isDashboardRoute && !isLoggedIn) {
-    return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  if (isAuthRoute && isLoggedIn) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
-  }
-
-  return NextResponse.next();
-});
-
-export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
-};
-```
+See [NextAuth docs](https://authjs.dev) for detailed configuration patterns.
 
 ### 2. tRPC Integration
 
-**tRPC Client Setup** (`lib/trpc/client.ts`):
-```typescript
-'use client';
+**Setup:**
+- Client: `lib/trpc/client.ts` - React Query hooks for client components
+- Server: `lib/trpc/server.ts` - Direct procedure calls in server components
+- Provider: `lib/trpc/provider.tsx` - Wraps app with tRPC + React Query context
 
-import { createTRPCReact } from '@trpc/react-query';
-import { type AppRouter } from '@hifzhub/api';
+**Usage:**
+- Server components: `const data = await api.router.procedure()`
+- Client components: `const { data } = api.router.procedure.useQuery()`
+- Mutations: `const mutation = api.router.procedure.useMutation()`
 
-export const api = createTRPCReact<AppRouter>();
-```
-
-**tRPC Provider** (`lib/trpc/provider.tsx`):
-```typescript
-'use client';
-
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { httpBatchLink } from '@trpc/client';
-import { useState } from 'react';
-import { api } from './client';
-
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
-  const [trpcClient] = useState(() =>
-    api.createClient({
-      links: [
-        httpBatchLink({
-          url: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/trpc`,
-        }),
-      ],
-    })
-  );
-
-  return (
-    <api.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </api.Provider>
-  );
-}
-```
-
-**Server-side tRPC** (`lib/trpc/server.ts`):
-```typescript
-import { createCaller } from '@hifzhub/api';
-import { db } from '@hifzhub/database';
-import { auth } from '@/lib/auth/config';
-
-export const api = createCaller({
-  db,
-  user: await auth(),
-});
-```
-
-**Usage in Server Components**:
-```typescript
-// app/(dashboard)/classes/page.tsx
-import { api } from '@/lib/trpc/server';
-
-export default async function ClassesPage() {
-  const classes = await api.class.getAll();
-  
-  return (
-    <div>
-      {classes.map(cls => (
-        <ClassCard key={cls.id} class={cls} />
-      ))}
-    </div>
-  );
-}
-```
-
-**Usage in Client Components**:
-```typescript
-'use client';
-
-import { api } from '@/lib/trpc/client';
-
-export function CreateClassForm() {
-  const createClass = api.class.create.useMutation({
-    onSuccess: () => {
-      router.push('/dashboard/classes');
-    },
-  });
-
-  return (
-    <form onSubmit={(e) => {
-      e.preventDefault();
-      createClass.mutate({ name: '...' });
-    }}>
-      {/* form fields */}
-    </form>
-  );
-}
-```
+See [tRPC Next.js docs](https://trpc.io/docs/client/nextjs) for complete patterns.
 
 ### 3. Session Recording Interface
 
-**Session Form Component** (`components/forms/session-form.tsx`):
-```typescript
-'use client';
-
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { sessionSchema } from '@hifzhub/validators';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { AttendanceToggle } from '@/components/sessions/attendance-toggle';
-import { MistakeCounter } from '@/components/sessions/mistake-counter';
-import { AssignmentInputs } from '@/components/sessions/assignment-inputs';
-
-export function SessionForm({ studentId, onSuccess }) {
-  const { register, handleSubmit, watch, setValue } = useForm({
-    resolver: zodResolver(sessionSchema),
-    defaultValues: {
-      studentId,
-      attendance: 'PRESENT',
-      mistakes: 0,
-      assignments: [],
-    },
-  });
-
-  const createSession = api.session.create.useMutation({ onSuccess });
-
-  return (
-    <form onSubmit={handleSubmit((data) => createSession.mutate(data))} className="space-y-6">
-      {/* Student Info Header */}
-      <div className="bg-card p-4 rounded-lg">
-        <h2 className="text-xl font-semibold">{student.name}</h2>
-        <p className="text-muted-foreground">{student.class.name}</p>
-      </div>
-
-      {/* Attendance */}
-      <AttendanceToggle
-        value={watch('attendance')}
-        onChange={(value) => setValue('attendance', value)}
-      />
-
-      {/* Assignments */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Assignments</h3>
-        <AssignmentInputs
-          types={['NEW_LESSON', 'NEAREST_REVIEW', 'GENERAL_REVIEW']}
-          onChange={(assignments) => setValue('assignments', assignments)}
-        />
-      </div>
-
-      {/* Mistakes */}
-      <MistakeCounter
-        value={watch('mistakes')}
-        onChange={(value) => setValue('mistakes', value)}
-      />
-
-      {/* Notes */}
-      <Textarea
-        {...register('notes')}
-        placeholder="Session notes..."
-        rows={4}
-      />
-
-      <Button type="submit" disabled={createSession.isPending}>
-        {createSession.isPending ? 'Saving...' : 'Save Session'}
-      </Button>
-    </form>
-  );
-}
-```
+**Key Components:**
+- `SessionForm` - Main form using React Hook Form + Zod validation
+- `AttendanceToggle` - Radio group for attendance status
+- `AssignmentInputs` - Dynamic inputs for 3 assignment types
+- `MistakeCounter` - Increment/decrement counter
+- Uses Shadcn UI components (Button, Input, Textarea, Select)
 
 ### 4. Dashboard Layout
 
-**Dashboard Layout** (`app/(dashboard)/layout.tsx`):
-```typescript
-import { Sidebar } from '@/components/layout/sidebar';
-import { Header } from '@/components/layout/header';
-import { auth } from '@/lib/auth/config';
-import { redirect } from 'next/navigation';
-
-export default async function DashboardLayout({ children }) {
-  const session = await auth();
-  
-  if (!session) {
-    redirect('/login');
-  }
-
-  return (
-    <div className="flex h-screen bg-background">
-      <Sidebar user={session.user} />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header user={session.user} />
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
-}
-```
+Protected route group with shared layout:
+- Sidebar navigation
+- Header with user info
+- Main content area with overflow scroll
+- Auth check via NextAuth `auth()` function
 
 ### 5. Analytics Dashboard
 
-**Analytics Page** (`app/(dashboard)/analytics/page.tsx`):
-```typescript
-import { api } from '@/lib/trpc/server';
-import { StatsCard } from '@/components/analytics/stats-card';
-import { AttendanceChart } from '@/components/analytics/attendance-chart';
-import { ProgressReport } from '@/components/analytics/progress-report';
-
-export default async function AnalyticsPage() {
-  const stats = await api.analytics.getStats();
-  const attendance = await api.analytics.getAttendance({ period: 'month' });
-  const progress = await api.analytics.getProgress();
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Analytics</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatsCard title="Total Students" value={stats.totalStudents} />
-        <StatsCard title="Active Classes" value={stats.activeClasses} />
-        <StatsCard title="Avg Attendance" value={`${stats.avgAttendance}%`} />
-        <StatsCard title="Pages Memorized" value={stats.totalPages} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AttendanceChart data={attendance} />
-        <ProgressReport data={progress} />
-      </div>
-    </div>
-  );
-}
-```
+Server-side data fetching for stats, charts, and reports:
+- Grid layout for stat cards (total students, attendance rate, etc.)
+- Charts for attendance trends and progress
+- All data fetched via tRPC in server component
 
 ## Styling with Tailwind + Shadcn
 
-### Tailwind Configuration (`tailwind.config.ts`):
-```typescript
-import type { Config } from 'tailwindcss';
-
-const config: Config = {
-  darkMode: ['class'],
-  content: [
-    './app/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-  ],
-  theme: {
-    extend: {
-      colors: {
-        border: 'hsl(var(--border))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
-        },
-        // ... Shadcn color tokens
-      },
-    },
-  },
-  plugins: [require('tailwindcss-animate')],
-};
-
-export default config;
-```
-
-### Using Shadcn Components:
-```bash
-# Install Shadcn component
-npx shadcn-ui@latest add button
-npx shadcn-ui@latest add card
-npx shadcn-ui@latest add dialog
-```
+- **Tailwind CSS 4**: Configured via PostCSS
+- **Shadcn UI**: Add components with `npx shadcn-ui@latest add <component>`
+- **Dark mode**: CSS variable-based theming with `class` strategy
+- **Colors**: HSL-based design tokens (background, foreground, primary, etc.)
 
 ## Data Fetching Patterns
 
-### Server Components (Preferred for reads):
-```typescript
-// Direct database access with Drizzle
-import { db } from '@hifzhub/database';
-import { students } from '@hifzhub/database/schema';
+**Server Components (preferred for reads):**
+- Direct DB access with Drizzle OR tRPC server-side caller
+- Automatic request deduplication and caching
 
-export default async function Page() {
-  const allStudents = await db.select().from(students);
-  return <StudentList students={allStudents} />;
-}
-```
+**Client Components (for interactions):**
+- tRPC React Query hooks (`useQuery`, `useMutation`)
+- Optimistic updates and cache invalidation
 
-### Client Components (For interactions):
-```typescript
-'use client';
+**Performance:** Use Next.js `Image`, Google Fonts optimization, route-level caching/revalidation
 
-import { api } from '@/lib/trpc/client';
-
-export function StudentList() {
-  const { data, isLoading } = api.student.getAll.useQuery();
-  
-  if (isLoading) return <Spinner />;
-  
-  return <ul>{data.map(s => <li key={s.id}>{s.name}</li>)}</ul>;
-}
-```
-
-### Mutations:
-```typescript
-'use client';
-
-export function DeleteStudentButton({ studentId }) {
-  const utils = api.useUtils();
-  const deleteStudent = api.student.delete.useMutation({
-    onSuccess: () => {
-      utils.student.getAll.invalidate();
-    },
-  });
-
-  return (
-    <Button
-      onClick={() => deleteStudent.mutate({ id: studentId })}
-      variant="destructive"
-    >
-      Delete
-    </Button>
-  );
-}
-```
-
-## Performance Optimizations
-
-### Route Caching:
-- Static pages cached automatically
-- Dynamic routes use `revalidate` or `dynamic = 'force-dynamic'`
-- Use `unstable_cache` for expensive server-side computations
-
-### Image Optimization:
-```typescript
-import Image from 'next/image';
-
-<Image
-  src="/student-avatar.jpg"
-  alt="Student"
-  width={100}
-  height={100}
-  className="rounded-full"
-/>
-```
-
-### Font Optimization:
-```typescript
-import { Inter } from 'next/font/google';
-
-const inter = Inter({ subsets: ['latin'] });
-
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en" className={inter.className}>
-      <body>{children}</body>
-    </html>
-  );
-}
-```
+See [Next.js data fetching](https://nextjs.org/docs/app/building-your-application/data-fetching) for patterns.
 
 ## Environment Variables
 
 **Required in `.env.local`:**
-```bash
-# Database
-DATABASE_URL="postgresql://..."
-
-# NextAuth
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-key"
-
-# tRPC
-NEXT_PUBLIC_API_URL="http://localhost:3000"
-```
-
-## Testing
-
-```bash
-# Unit tests
-pnpm test
-
-# E2E tests (Playwright)
-pnpm test:e2e
-
-# Type checking
-pnpm typecheck
-```
-
-## Deployment (Vercel)
-
-1. Connect GitHub repository to Vercel
-2. Configure environment variables in Vercel dashboard
-3. Set build command: `turbo run build --filter=web`
-4. Set output directory: `apps/web/.next`
-5. Deploy automatically on push to `main`
+- `DATABASE_URL` - PostgreSQL connection
+- `NEXTAUTH_URL`, `NEXTAUTH_SECRET` - NextAuth config
+- `NEXT_PUBLIC_API_URL` - tRPC endpoint
 
 ## Best Practices
 
-1. **Use Server Components by default** - Only add `'use client'` when needed
-2. **Collocate data fetching** - Fetch data where it's used
-3. **Type everything** - Leverage TypeScript and tRPC for full type safety
-4. **Use Shadcn components** - Don't build UI primitives from scratch
-5. **Optimize images** - Always use `next/image`
-6. **Handle loading states** - Show skeletons/spinners for async operations
-7. **Validate inputs** - Use Zod schemas from `@hifzhub/validators`
-8. **Error boundaries** - Use `error.tsx` files for error handling
-9. **Accessibility** - Use semantic HTML and ARIA attributes
-10. **Mobile responsive** - Test on various screen sizes
+1. Server Components by default (`'use client'` only when needed)
+2. Collocate data fetching where used
+3. Use Shadcn components, not custom primitives
+4. Zod validation for all inputs
+5. Handle loading/error states with Suspense and error boundaries
+6. Optimize with Next.js `Image` and font optimization
+7. Mobile-responsive design
 
 ## Common Patterns
 
-### Protected API Route:
-```typescript
-// app/api/some-route/route.ts
-import { auth } from '@/lib/auth/config';
-import { NextResponse } from 'next/server';
-
-export async function GET() {
-  const session = await auth();
-  
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  
-  // ... handle request
-}
-```
-
-### Form with Server Action:
-```typescript
-// app/actions.ts
-'use server';
-
-import { revalidatePath } from 'next/cache';
-
-export async function createStudent(formData: FormData) {
-  const name = formData.get('name');
-  // ... create student
-  revalidatePath('/dashboard/students');
-}
-
-// In component
-<form action={createStudent}>
-  <input name="name" />
-  <button type="submit">Create</button>
-</form>
-```
-
-### Dynamic Metadata:
-```typescript
-export async function generateMetadata({ params }) {
-  const student = await getStudent(params.id);
-  return {
-    title: `${student.name} - HifzHub`,
-  };
-}
-```
+- **Protected routes**: Middleware or `auth()` check in layout
+- **Server Actions**: For form mutations with revalidation
+- **Dynamic metadata**: `generateMetadata()` for SEO
+- **Error handling**: `error.tsx` boundaries at route level
 
 ## Troubleshooting
 
-**tRPC types not updating:**
-```bash
-turbo run build --filter=@hifzhub/api
-```
+| Issue | Solution |
+|-------|----------|
+| tRPC types stale | `turbo run build --filter=@hifzhub/api` |
+| Drizzle types stale | `pnpm db:generate` |
+| Hot reload broken | Delete `.next/`, restart server |
+| Build failing | `pnpm clean && pnpm install && turbo build` |
 
-**Drizzle types out of sync:**
-```bash
-pnpm db:generate
-```
-
-**Build errors:**
-```bash
-pnpm clean
-pnpm install
-turbo run build
-```
-
-**Hot reload not working:**
-- Restart dev server
-- Clear `.next` folder
-- Check for TypeScript errors
-
-For additional guidance, see the root `CLAUDE.md` file.
+See root `CLAUDE.md` for monorepo-level guidance.

@@ -71,158 +71,30 @@ pnpm lint                 # Lint all
 
 ## Drizzle ORM Patterns
 
-### Schema Definition
-```typescript
-// packages/database/src/schema/users.ts
-import { pgTable, text, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+**Schema:** Define tables with `pgTable`, use enums, CUID2 for IDs
+**Queries:** Select/where/orderBy, `.insert().values().returning()`, `.update().set().where()`
 
-export const roleEnum = pgEnum('role', ['TEACHER', 'STUDENT', 'PARENT']);
-
-export const users = pgTable('users', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  email: text('email').notNull().unique(),
-  name: text('name').notNull(),
-  role: roleEnum('role').notNull(),
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
-});
-```
-
-### Querying
-```typescript
-import { db } from '@hifzhub/database';
-import { users, sessions } from '@hifzhub/database/schema';
-import { eq, desc } from 'drizzle-orm';
-
-// Select
-const allUsers = await db.select().from(users);
-
-// Where + Order
-const userSessions = await db
-  .select()
-  .from(sessions)
-  .where(eq(sessions.studentId, id))
-  .orderBy(desc(sessions.date))
-  .limit(10);
-
-// Insert
-const [newUser] = await db
-  .insert(users)
-  .values({ email, name, role: 'STUDENT' })
-  .returning();
-
-// Update
-await db
-  .update(users)
-  .set({ name: 'New Name' })
-  .where(eq(users.id, id));
-```
+See [Drizzle docs](https://orm.drizzle.team) for full query API.
 
 ## tRPC Setup
 
-### Router Definition
-```typescript
-// packages/api/src/routers/student.ts
-import { router, protectedProcedure } from '../trpc';
-import { students } from '@hifzhub/database/schema';
-import { eq } from 'drizzle-orm';
+**Routers:** Define in `packages/api/src/routers/` with `protectedProcedure` for auth
+**Web usage:** `await api.router.procedure()` (server) or `api.router.procedure.useQuery()` (client)
+**Mobile usage:** `api.router.procedure.useQuery()` or `.useMutation()`
 
-export const studentRouter = router({
-  getById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }) => 
-      ctx.db.select().from(students).where(eq(students.id, input.id))
-    ),
-});
-```
-
-### Client Usage (Web)
-```typescript
-// Server Component
-import { api } from '@/lib/trpc/server';
-const students = await api.student.getAll();
-
-// Client Component
-'use client';
-import { api } from '@/lib/trpc/client';
-const { data } = api.student.getAll.useQuery();
-```
-
-### Client Usage (Mobile)
-```typescript
-import { api } from '@/lib/trpc/client';
-const { data } = api.student.getById.useQuery({ id });
-```
+See [tRPC docs](https://trpc.io) for complete API.
 
 ## Component Libraries
 
-### Web (Shadcn UI)
-```bash
-npx shadcn-ui@latest add button card input
-```
+**Web:** Shadcn UI - `npx shadcn-ui@latest add <component>`
+**Mobile:** React Native Reusables - `npx @react-native-reusables/cli@latest add <component>`
 
-```tsx
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-
-<Card>
-  <CardHeader>
-    <CardTitle>Session Details</CardTitle>
-  </CardHeader>
-  <Button>Save</Button>
-</Card>
-```
-
-### Mobile (React Native Reusables)
-```bash
-npx @react-native-reusables/cli@latest add button card input
-```
-
-```tsx
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Text } from '@/components/ui/text';
-
-<Card>
-  <CardHeader>
-    <CardTitle>Session Details</CardTitle>
-  </CardHeader>
-  <Button>
-    <Text>Save</Text>
-  </Button>
-</Card>
-```
+Both use similar component APIs (Button, Card, Input, etc.)
 
 ## Authentication
 
-### Web (NextAuth.js)
-```typescript
-// lib/auth/config.ts
-import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import { DrizzleAdapter } from '@auth/drizzle-adapter';
-import { db } from '@hifzhub/database';
-
-export const { handlers, auth } = NextAuth({
-  adapter: DrizzleAdapter(db),
-  providers: [Credentials({ /* ... */ })],
-});
-```
-
-### Mobile (Custom + Secure Storage)
-```typescript
-import * as SecureStore from 'expo-secure-store';
-
-// Store token
-await SecureStore.setItemAsync('token', token);
-
-// Retrieve token
-const token = await SecureStore.getItemAsync('token');
-
-// Use in tRPC headers
-headers: async () => ({
-  authorization: `Bearer ${await SecureStore.getItemAsync('token')}`,
-})
-```
+**Web:** NextAuth.js v5 with DrizzleAdapter, JWT sessions
+**Mobile:** Custom auth with tokens in `expo-secure-store`, injected into tRPC headers
 
 ## Environment Variables
 
@@ -275,43 +147,9 @@ pnpm db:push
 
 ## Common Patterns
 
-### Server-Side Data Fetching (Web)
-```typescript
-// app/dashboard/page.tsx
-import { db } from '@hifzhub/database';
-import { students } from '@hifzhub/database/schema';
-
-export default async function DashboardPage() {
-  const allStudents = await db.select().from(students);
-  return <StudentList students={allStudents} />;
-}
-```
-
-### Client-Side Mutations
-```typescript
-'use client';
-import { api } from '@/lib/trpc/client';
-
-const createStudent = api.student.create.useMutation({
-  onSuccess: () => {
-    router.push('/students');
-  },
-});
-
-<form onSubmit={() => createStudent.mutate({ name, email })}>
-```
-
-### Mobile Forms with RNR
-```typescript
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Text } from '@/components/ui/text';
-
-<Input placeholder="Student name" value={name} onChangeText={setName} />
-<Button onPress={handleSubmit}>
-  <Text>Submit</Text>
-</Button>
-```
+**Web data fetching:** Server components use direct DB access or tRPC server caller
+**Client mutations:** Use tRPC `useMutation` with React Query cache invalidation
+**Mobile forms:** RNR components (Input, Button) with local state management
 
 ## Troubleshooting
 

@@ -4,20 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Project Overview
 
-**HifzHub** is a comprehensive Quran Hifz (memorization) management platform that helps teachers manage their programs, track student progress, and facilitate communication between teachers, students, and parents.
+**HifzHub** is a Quran Hifz (memorization) management platform for teachers, students, and parents.
 
 ### Core Features
-- **Teacher Tools**: Record sessions, track attendance, assign work (new lesson/nearest review/review), log mistakes, add notes
-- **Student Portal**: View assignments, mark completion, access Quran text with teacher annotations, track progress
-- **Parent Dashboard**: Monitor children's progress, view teacher notes, acknowledge assignments
-- **Quran Viewer**: Display Quran text with teacher markups, audio recitation, navigation
+- **Teacher Tools**: Record sessions, track attendance, assign work, log mistakes
+- **Student Portal**: View assignments, access Quran text with annotations, track progress
+- **Parent Dashboard**: Monitor children's progress
+- **Quran Viewer**: Display Quran with teacher markups and audio
 
 ### User Roles
-- **Teachers**: Primary users who manage classes and record sessions
-- **Teaching Assistants**: Can record sessions but not modify student records
-- **Students**: View assignments and track their own progress
-- **Parents**: Monitor their children's progress and communicate with teachers
-- **Admins**: Manage programs, classes, and users (future phase)
+Teachers, Teaching Assistants, Students, Parents, Admins
 
 ## Monorepo Architecture
 
@@ -241,467 +237,89 @@ turbo run ios --filter=mobile
 
 ## Database Schema (Drizzle)
 
+Schema located in `packages/database/src/schema/`. See [Drizzle docs](https://orm.drizzle.team/docs) for syntax.
+
 ### Core Tables
+- **users** - All accounts with role enum (ADMIN, TEACHER, ASSISTANT, STUDENT, PARENT)
+- **programs → classes** - Educational hierarchy
+- **teachers, students, parents** - Role-specific profiles (1:1 with users)
+- **sessions** - Teaching records with attendance, mistakes, notes
+- **assignments** - Three types: NEW_LESSON, NEAREST_REVIEW, GENERAL_REVIEW
+- **mistakes** - Categorized by type (TAJWEED, PRONUNCIATION, etc.) and severity
+- **annotations** - Teacher markups on Quran text (highlights, notes, coordinates)
 
-```typescript
-// packages/database/src/schema/users.ts
-import { pgTable, text, timestamp, pgEnum } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-
-export const roleEnum = pgEnum('role', ['ADMIN', 'TEACHER', 'ASSISTANT', 'STUDENT', 'PARENT']);
-
-export const users = pgTable('users', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  email: text('email').notNull().unique(),
-  name: text('name').notNull(),
-  passwordHash: text('password_hash'),
-  role: roleEnum('role').notNull(),
-  image: text('image'),
-  emailVerified: timestamp('email_verified', { mode: 'date' }),
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/programs.ts
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-
-export const programs = pgTable('programs', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  name: text('name').notNull(),
-  description: text('description'),
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-export const classes = pgTable('classes', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  name: text('name').notNull(),
-  programId: text('program_id').notNull().references(() => programs.id),
-  schedule: text('schedule'), // JSON string
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/profiles.ts
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-import { users } from './users';
-import { classes } from './programs';
-
-export const teachers = pgTable('teachers', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  userId: text('user_id').notNull().unique().references(() => users.id),
-});
-
-export const students = pgTable('students', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  userId: text('user_id').notNull().unique().references(() => users.id),
-  classId: text('class_id').notNull().references(() => classes.id),
-  enrolledAt: timestamp('enrolled_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-export const parents = pgTable('parents', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  userId: text('user_id').notNull().unique().references(() => users.id),
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/sessions.ts
-import { pgTable, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-import { students } from './profiles';
-import { teachers } from './profiles';
-
-export const attendanceEnum = pgEnum('attendance', ['PRESENT', 'ABSENT', 'EXCUSED', 'LATE']);
-
-export const sessions = pgTable('sessions', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  date: timestamp('date', { mode: 'date' }).notNull().defaultNow(),
-  studentId: text('student_id').notNull().references(() => students.id),
-  teacherId: text('teacher_id').notNull().references(() => teachers.id),
-  attendance: attendanceEnum('attendance').notNull(),
-  notes: text('notes'),
-  duration: integer('duration'), // minutes
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/assignments.ts
-import { pgTable, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-import { sessions } from './sessions';
-import { students } from './profiles';
-
-export const assignmentTypeEnum = pgEnum('assignment_type', [
-  'NEW_LESSON',      // Sabaq Jadeed: New memorization
-  'NEAREST_REVIEW',  // Sabaq Para: Recent review
-  'GENERAL_REVIEW',  // Manzil: Older material
-]);
-
-export const assignmentStatusEnum = pgEnum('assignment_status', [
-  'ASSIGNED',
-  'IN_PROGRESS',
-  'COMPLETED',
-  'NEEDS_REVIEW',
-]);
-
-export const assignments = pgTable('assignments', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  sessionId: text('session_id').notNull().references(() => sessions.id),
-  studentId: text('student_id').notNull().references(() => students.id),
-  type: assignmentTypeEnum('type').notNull(),
-  surah: integer('surah').notNull(), // 1-114
-  ayahStart: integer('ayah_start').notNull(),
-  ayahEnd: integer('ayah_end').notNull(),
-  pageNumber: integer('page_number'),
-  juzNumber: integer('juz_number'),
-  status: assignmentStatusEnum('status').notNull().default('ASSIGNED'),
-  completedAt: timestamp('completed_at', { mode: 'date' }),
-  dueDate: timestamp('due_date', { mode: 'date' }),
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/mistakes.ts
-import { pgTable, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-import { sessions } from './sessions';
-
-export const mistakeTypeEnum = pgEnum('mistake_type', [
-  'TAJWEED',
-  'PRONUNCIATION',
-  'SKIPPED_AYAH',
-  'WORD_SUBSTITUTION',
-  'HESITATION',
-  'OTHER',
-]);
-
-export const severityEnum = pgEnum('severity', ['MINOR', 'MAJOR']);
-
-export const mistakes = pgTable('mistakes', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  sessionId: text('session_id').notNull().references(() => sessions.id),
-  type: mistakeTypeEnum('type').notNull(),
-  surah: integer('surah').notNull(),
-  ayah: integer('ayah').notNull(),
-  description: text('description'),
-  severity: severityEnum('severity').notNull().default('MINOR'),
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-});
-
-// packages/database/src/schema/annotations.ts
-import { pgTable, text, timestamp, integer, json } from 'drizzle-orm/pg-core';
-import { createId } from '@paralleldrive/cuid2';
-
-export const annotations = pgTable('annotations', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  studentId: text('student_id').notNull(),
-  teacherId: text('teacher_id').notNull(),
-  surah: integer('surah').notNull(),
-  ayah: integer('ayah').notNull(),
-  type: text('type').notNull(), // "highlight", "circle", "note"
-  color: text('color'),
-  note: text('note'),
-  coordinates: json('coordinates'), // {x, y, width, height}
-  createdAt: timestamp('created_at', { mode: 'date' }).notNull().defaultNow(),
-});
-```
+### Key Enums
+- **attendance**: PRESENT, ABSENT, EXCUSED, LATE
+- **assignment_status**: ASSIGNED, IN_PROGRESS, COMPLETED, NEEDS_REVIEW
+- **mistake_type**: TAJWEED, PRONUNCIATION, SKIPPED_AYAH, WORD_SUBSTITUTION, HESITATION
 
 ### Relations
-
-```typescript
-// packages/database/src/schema/relations.ts
-import { relations } from 'drizzle-orm';
-import { users, teachers, students, parents } from './users';
-import { programs, classes } from './programs';
-import { sessions, assignments, mistakes } from './sessions';
-
-export const usersRelations = relations(users, ({ one }) => ({
-  teacher: one(teachers, { fields: [users.id], references: [teachers.userId] }),
-  student: one(students, { fields: [users.id], references: [students.userId] }),
-  parent: one(parents, { fields: [users.id], references: [parents.userId] }),
-}));
-
-export const studentsRelations = relations(students, ({ one, many }) => ({
-  user: one(users, { fields: [students.userId], references: [users.id] }),
-  class: one(classes, { fields: [students.classId], references: [classes.id] }),
-  sessions: many(sessions),
-  assignments: many(assignments),
-}));
-
-export const sessionsRelations = relations(sessions, ({ one, many }) => ({
-  student: one(students, { fields: [sessions.studentId], references: [students.id] }),
-  teacher: one(teachers, { fields: [sessions.teacherId], references: [teachers.id] }),
-  assignments: many(assignments),
-  mistakes: many(mistakes),
-}));
-
-export const assignmentsRelations = relations(assignments, ({ one }) => ({
-  session: one(sessions, { fields: [assignments.sessionId], references: [sessions.id] }),
-  student: one(students, { fields: [assignments.studentId], references: [students.id] }),
-}));
-```
+- Users have one teacher/student/parent profile
+- Students belong to classes, have many sessions and assignments
+- Sessions link teachers and students, contain assignments and mistakes
 
 ## Development Patterns
 
 ### tRPC API Structure
+- API routers in `packages/api/src/routers/` (one per domain: auth, session, student, etc.)
+- Use `protectedProcedure` for authenticated endpoints
+- Input validation with Zod schemas from `@hifzhub/validators`
+- See [tRPC docs](https://trpc.io/docs) for router/procedure patterns
 
-All API logic lives in `packages/api/src/routers/`. Each router handles a specific domain:
+### Using tRPC
+**Web (Server Components):** Import `api` from `@/lib/trpc/server`, call procedures directly
+**Web (Client Components):** Import `api` from `@/lib/trpc/client`, use React Query hooks
+**Mobile:** Import `api` from `@/lib/trpc/client`, use React Query hooks
 
-```typescript
-// packages/api/src/routers/session.ts
-import { z } from 'zod';
-import { router, protectedProcedure } from '../trpc';
-import { sessions, assignments } from '@hifzhub/database/schema';
-import { eq, desc } from 'drizzle-orm';
-
-export const sessionRouter = router({
-  // Create new session
-  create: protectedProcedure
-    .input(z.object({
-      studentId: z.string(),
-      attendance: z.enum(['PRESENT', 'ABSENT', 'EXCUSED', 'LATE']),
-      notes: z.string().optional(),
-      duration: z.number().optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const [session] = await ctx.db
-        .insert(sessions)
-        .values({
-          ...input,
-          teacherId: ctx.user.id,
-        })
-        .returning();
-      
-      return session;
-    }),
-
-  // Get recent sessions for student
-  getByStudent: protectedProcedure
-    .input(z.object({
-      studentId: z.string(),
-      limit: z.number().default(10),
-    }))
-    .query(async ({ ctx, input }) => {
-      return ctx.db
-        .select()
-        .from(sessions)
-        .where(eq(sessions.studentId, input.studentId))
-        .orderBy(desc(sessions.date))
-        .limit(input.limit);
-    }),
-});
-```
-
-### Using tRPC in Web App
-
-```typescript
-// apps/web/app/dashboard/page.tsx
-import { api } from '@/lib/trpc/server';
-
-export default async function DashboardPage() {
-  const sessions = await api.session.getRecent.query({ limit: 5 });
-  
-  return (
-    <div>
-      {sessions.map(session => (
-        <SessionCard key={session.id} session={session} />
-      ))}
-    </div>
-  );
-}
-```
-
-### Using tRPC in Mobile App
-
-```typescript
-// apps/mobile/app/(teacher)/sessions/new.tsx
-import { api } from '@/lib/trpc';
-import { useMutation } from '@tanstack/react-query';
-
-export default function NewSessionScreen() {
-  const createSession = api.session.create.useMutation({
-    onSuccess: () => {
-      router.back();
-    },
-  });
-
-  const handleSubmit = (data) => {
-    createSession.mutate(data);
-  };
-
-  return <SessionForm onSubmit={handleSubmit} />;
-}
-```
-
-### Shared Component Pattern
-
-```typescript
-// packages/ui/src/button.tsx
-import { Pressable, Text } from 'react-native';
-// For web, could import from 'react' instead
-
-interface ButtonProps {
-  onPress: () => void;
-  children: React.ReactNode;
-  variant?: 'primary' | 'secondary';
-}
-
-export function Button({ onPress, children, variant = 'primary' }: ButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`px-4 py-2 rounded-lg ${
-        variant === 'primary' ? 'bg-blue-600' : 'bg-gray-600'
-      }`}
-    >
-      <Text className="text-white font-semibold">{children}</Text>
-    </Pressable>
-  );
-}
-```
+### Shared Components
+Optional `packages/ui/` for cross-platform components. Use NativeWind for styling compatibility.
 
 ## Environment Variables
 
-### Required Variables
+### Root `.env`
+- `DATABASE_URL` - PostgreSQL connection string
 
-```bash
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/hifzhub"
+### Web `apps/web/.env.local`
+- `NEXTAUTH_URL`, `NEXTAUTH_SECRET` - NextAuth.js configuration
+- `NEXT_PUBLIC_API_URL` - tRPC endpoint
 
-# NextAuth.js (Web)
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+### Mobile `apps/mobile/.env`
+- `EXPO_PUBLIC_API_URL` - tRPC endpoint (use local IP, not localhost)
+- `EXPO_PUBLIC_APP_SCHEME` - Deep linking scheme
 
-# API URLs
-NEXT_PUBLIC_API_URL="http://localhost:3000/api/trpc"
-EXPO_PUBLIC_API_URL="http://localhost:3000/api/trpc"
+## Development Phases
 
-# Expo
-EXPO_PUBLIC_APP_SCHEME="hifzhub"
-```
+**Phase 1:** Foundation (monorepo, database, auth)
+**Phase 2:** Teacher core (session recording, class management)
+**Phase 3:** Student features (assignments, progress, Quran viewer)
+**Phase 4:** Parent portal
+**Phase 5:** Enhanced Quran viewer (annotations, audio)
 
-### Per-App .env Files
+## Testing & Deployment
 
-- `apps/web/.env.local` - Web-specific variables
-- `apps/mobile/.env` - Mobile-specific variables (committed to repo for Expo)
-- `packages/database/.env` - Database connection for Prisma CLI
+**Testing:** `pnpm test`, `pnpm test:e2e`, `pnpm typecheck`
+**Web Deploy:** Vercel (auto from `main`)
+**Mobile Deploy:** EAS Build (`eas build`, `eas submit`)
+**Database:** Hosted PostgreSQL with migrations via `pnpm db:migrate`
 
-## MVP Development Phases
+## Code Conventions
 
-### Phase 1: Foundation (Current)
-- [x] Monorepo setup with Turborepo
-- [x] Next.js web app boilerplate
-- [x] Expo mobile app boilerplate
-- [ ] Drizzle schema definition
-- [ ] tRPC API setup
-- [ ] Authentication (NextAuth.js with Drizzle adapter)
-
-### Phase 2: Teacher Core Features
-- [ ] Teacher dashboard
-- [ ] Class roster view
-- [ ] Session recording screen
-- [ ] Student detail view
-- [ ] Assignment creation
-
-### Phase 3: Student Features
-- [ ] Student dashboard
-- [ ] Assignment viewer
-- [ ] Progress tracking
-- [ ] Basic Quran text viewer
-
-### Phase 4: Parent Portal
-- [ ] Parent dashboard
-- [ ] Progress monitoring
-- [ ] Teacher notes view
-- [ ] Assignment acknowledgment
-
-### Phase 5: Enhanced Quran Viewer
-- [ ] Teacher annotations/markups
-- [ ] Audio recitation integration
-- [ ] Multiple Mushaf styles
-- [ ] Practice mode
-
-## Testing Strategy
-
-```bash
-# Unit tests (Vitest)
-pnpm test
-
-# E2E tests (Playwright for web, Detox for mobile)
-pnpm test:e2e
-
-# Type checking
-pnpm typecheck
-```
-
-## Deployment
-
-### Web (Vercel)
-- Automatic deployments from `main` branch
-- Preview deployments for PRs
-- Environment variables configured in Vercel dashboard
-
-### Mobile (Expo EAS)
-```bash
-# Build for iOS
-pnpm mobile:build:ios
-
-# Build for Android
-pnpm mobile:build:android
-
-# Submit to stores
-pnpm mobile:submit
-```
-
-### Database (Production)
-- Hosted on Supabase/Neon/Railway
-- Migrations run via `pnpm db:migrate`
-- Regular backups configured
-
-## Code Style & Conventions
-
-- **TypeScript**: Strict mode enabled
-- **ESLint**: Next.js + React Native presets
-- **Prettier**: Consistent code formatting
-- **Conventional Commits**: Semantic commit messages
-- **Naming**:
-  - Components: PascalCase (`SessionCard.tsx`)
-  - Files: kebab-case (`use-auth.ts`)
-  - Functions: camelCase (`getUserById`)
-  - Constants: UPPER_SNAKE_CASE (`MAX_MISTAKES`)
+- TypeScript strict mode
+- PascalCase components, camelCase functions, kebab-case files
+- Conventional commits
 
 ## Troubleshooting
 
-### Common Issues
+| Issue | Solution |
+|-------|----------|
+| Drizzle types out of sync | `pnpm db:generate` |
+| tRPC types not updating | `turbo run build --filter=@hifzhub/api` |
+| Mobile can't connect | Use local IP in `EXPO_PUBLIC_API_URL`, not localhost |
+| Workspace deps broken | `pnpm install && turbo run build` |
+| Hot reload issues | `pnpm start --clear` (mobile) or delete `.next` (web) |
 
-**Drizzle types not generated:**
-```bash
-pnpm db:generate
-```
+## Resources
 
-**tRPC types not updating:**
-```bash
-turbo run build --filter=@hifzhub/api
-```
-
-**Mobile app not connecting to API:**
-- Check `EXPO_PUBLIC_API_URL` in `apps/mobile/.env`
-- Use computer's local IP, not `localhost` (e.g., `http://192.168.1.5:3000`)
-- Ensure web dev server is running
-
-**Workspace dependencies not resolving:**
-```bash
-pnpm install
-turbo run build
-```
-
-## Additional Resources
-
-- **App-specific guidance**: See `apps/web/CLAUDE.md` and `apps/mobile/CLAUDE.md`
-- **Package documentation**: Each package has its own README
-- **API documentation**: See `packages/api/CLAUDE.md` (when created)
-- **Drizzle docs**: https://orm.drizzle.team/docs/overview
-- **tRPC docs**: https://trpc.io/docs
-- **Expo docs**: https://docs.expo.dev
-- **Next.js docs**: https://nextjs.org/docs
-- **React Native Reusables**: https://rnr-docs.vercel.app
+- **App docs**: `apps/web/CLAUDE.md`, `apps/mobile/CLAUDE.md`
+- **Quick start**: `QUICKSTART.md` for rapid onboarding
+- **External**: [Drizzle](https://orm.drizzle.team), [tRPC](https://trpc.io), [Expo](https://docs.expo.dev), [Next.js](https://nextjs.org), [RNR](https://rnr-docs.vercel.app)
