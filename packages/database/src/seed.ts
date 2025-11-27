@@ -1,8 +1,8 @@
 import { config } from "dotenv";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { dirname, resolve } from "path";
 import pg from "pg";
+import { fileURLToPath } from "url";
 import { users } from "./schema";
 import { hashPassword } from "./utils/password";
 
@@ -10,7 +10,7 @@ const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Load environment variables from database package .env file
-config({ path: resolve(__dirname, "../.env") });
+config({ path: resolve(__dirname, "../../../.env") });
 
 const seedDatabase = async () => {
   if (!process.env.DATABASE_URL) {
@@ -27,28 +27,58 @@ const seedDatabase = async () => {
 
   try {
     // Hash the password
-    const password = "admin123"; // Default password for seed user
+    const password = "password123"; // Default password for seed users
     const passwordHash = await hashPassword(password);
 
-    // Insert a test user
-    const [newUser] = await db
-      .insert(users)
-      .values({
+    // Test users to create
+    const testUsers = [
+      {
         email: "admin@hifzhub.com",
         name: "Admin User",
-        role: "ADMIN",
-        passwordHash,
-      })
-      .returning();
+        role: "ADMIN" as const,
+      },
+      {
+        email: "teacher@hifzhub.com",
+        name: "Test Teacher",
+        role: "TEACHER" as const,
+      },
+      {
+        email: "student@hifzhub.com",
+        name: "Test Student",
+        role: "STUDENT" as const,
+      },
+    ];
 
-    console.log("✅ Successfully created test user:");
-    console.log("   Email:", newUser.email);
-    console.log("   Password:", password);
-    console.log("   Name:", newUser.name);
-    console.log("   Role:", newUser.role);
-    console.log("   ID:", newUser.id);
+    console.log("Creating test users...\n");
+
+    for (const userData of testUsers) {
+      try {
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            ...userData,
+            passwordHash,
+          })
+          .onConflictDoUpdate({
+            target: users.email,
+            set: { name: userData.name },
+          })
+          .returning();
+
+        console.log(`✅ Created: ${newUser.email} (${newUser.role})`);
+      } catch (err: any) {
+        if (err.code === '23505') {
+          console.log(`⏭️  Already exists: ${userData.email}`);
+        } else {
+          throw err;
+        }
+      }
+    }
 
     console.log("\n🎉 Database seeding completed!");
+    console.log("\nTest credentials (all users):");
+    console.log(`   Email: <user>@hifzhub.com`);
+    console.log(`   Password: ${password}`);
   } catch (error) {
     console.error("❌ Error seeding database:", error);
     await pool.end();
