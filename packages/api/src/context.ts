@@ -1,10 +1,8 @@
 /**
  * This file defines the context that's available to all tRPC procedures.
- * In a real app, this would include:
- * - Database instance
- * - Current user/session
- * - Request headers
  */
+
+import { db } from '@hifzhub/database';
 
 export interface CreateContextOptions {
   headers?: Headers;
@@ -18,6 +16,7 @@ export interface CreateContextOptions {
 
 export function createContext(opts?: CreateContextOptions) {
   return {
+    db,
     user: opts?.user ?? null,
     headers: opts?.headers,
   };
