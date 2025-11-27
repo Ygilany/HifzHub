@@ -1,11 +1,8 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "@hifzhub/typescript-config/react-native.json",
   "compilerOptions": {
-    "strict": true,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [

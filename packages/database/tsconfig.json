@@ -1,18 +1,7 @@
 {
+  "extends": "@hifzhub/typescript-config/base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "lib": ["ES2022"],
     "types": ["node"],
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
     "outDir": "dist"
   },
   "include": ["src/**/*", "drizzle.config.ts"],

@@ -12,6 +12,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@hifzhub/typescript-config": "workspace:*",
     "typescript": "^5.7.2"
   }
 }

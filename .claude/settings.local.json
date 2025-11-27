@@ -1,8 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm install)",
-      "Bash(curl:*)"
+      "Bash(pnpm --filter=mobile add:*)",
+      "Bash(pnpm --filter=@hifzhub/validators typecheck:*)",
+      "Bash(pnpm --filter=@hifzhub/api typecheck:*)",
+      "Bash(pnpm --filter=@hifzhub/database typecheck:*)",
+      "Bash(pnpm --filter=web typecheck:*)",
+      "Bash(pnpm tsc:*)"
     ],
     "deny": [],
     "ask": []
