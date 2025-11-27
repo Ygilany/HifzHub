@@ -14,10 +14,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hifzhub/database": "workspace:*",
+    "@hifzhub/validators": "workspace:*",
     "@trpc/server": "^11.7.2",
+    "bcrypt": "^5.1.1",
+    "drizzle-orm": "^0.44.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^24.10.1",
     "eslint": "^9.39.1",
     "typescript": "^5.9.3"
