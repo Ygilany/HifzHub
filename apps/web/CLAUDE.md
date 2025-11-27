@@ -275,6 +275,29 @@ See [Next.js data fetching](https://nextjs.org/docs/app/building-your-applicatio
 6. Optimize with Next.js `Image` and font optimization
 7. Mobile-responsive design
 
+### React Effects Guidelines
+
+Follow React's ["You Might Not Need an Effect"](https://react.dev/learn/you-might-not-need-an-effect) principles:
+
+**❌ Don't use effects for:**
+- Transforming data for rendering (compute during render instead)
+- Handling user events (use event handlers)
+- Resetting state when props change (use keys or calculate during render)
+- Deriving state from props or state (calculate during render)
+- Chains of effects that adjust state based on other state
+
+**✅ Do use effects for:**
+- Synchronizing with external systems (DOM manipulation, third-party widgets)
+- Subscribing to external data sources
+- Setting up analytics or logging
+- Browser-only APIs that need client-side initialization
+
+**✅ Preferred patterns:**
+- Server Components for data fetching (no effects needed)
+- React Query (tRPC hooks) for client-side data fetching
+- Event handlers for user interactions
+- Derived state calculated during render
+
 ## Common Patterns
 
 - **Protected routes**: Middleware or `auth()` check in layout

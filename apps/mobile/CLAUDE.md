@@ -336,6 +336,31 @@ See [RNR docs](https://rnr-docs.vercel.app) for full component API.
 8. Request permissions gracefully
 9. Profile performance with React DevTools
 
+### React Effects Guidelines
+
+Follow React's ["You Might Not Need an Effect"](https://react.dev/learn/you-might-not-need-an-effect) principles:
+
+**❌ Don't use effects for:**
+- Transforming data for rendering (compute during render instead)
+- Handling user events (use event handlers)
+- Resetting state when props change (use keys or calculate during render)
+- Deriving state from props or state (calculate during render)
+- Chains of effects that adjust state based on other state
+
+**✅ Do use effects for:**
+- Synchronizing with external systems (navigation, storage, subscriptions)
+- Subscribing to external data sources (NetInfo, device sensors)
+- Setting up analytics or tracking
+- Native module initialization
+
+**✅ Preferred patterns:**
+- React Query (tRPC hooks) for all data fetching
+- Event handlers (`onPress`, `onChange`) for user interactions
+- Derived state calculated during render
+- Expo Router navigation guards instead of navigation effects (when possible)
+
+**Note:** Auth navigation in `lib/auth/context.tsx` uses effects following Expo Router's recommended pattern for route protection in React Native, as there's no server-side redirect capability.
+
 ## Troubleshooting
 
 | Issue | Solution |

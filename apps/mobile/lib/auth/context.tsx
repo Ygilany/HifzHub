@@ -30,6 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Handle navigation based on auth state
+  // Note: This effect is necessary for route protection in React Native
+  // as there's no server-side redirect capability. This is the recommended
+  // pattern for Expo Router authentication flows.
   useEffect(() => {
     if (isLoading) return;
 
@@ -42,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Redirect to tabs if authenticated
       router.replace('/(tabs)');
     }
-  }, [user, segments, isLoading]);
+  }, [user, segments, isLoading, router]);
 
   const loadStoredAuth = async () => {
     try {
