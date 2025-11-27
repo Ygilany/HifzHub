@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { api } from '@/lib/trpc/client';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getApiUrl } from '@/lib/trpc/provider';
 
 export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
@@ -19,7 +20,7 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" />
           <ThemedText style={{ marginTop: 16 }}>Loading students...</ThemedText>
           <ThemedText style={{ marginTop: 8, fontSize: 12, opacity: 0.6 }}>
-            API: {process.env.EXPO_PUBLIC_API_URL}
+            API: {getApiUrl()}
           </ThemedText>
         </View>
       </SafeAreaView>
@@ -41,7 +42,7 @@ export default function HomeScreen() {
             1. Web server is running (pnpm dev in apps/web)
           </ThemedText>
           <ThemedText style={styles.errorHint}>
-            2. API URL is correct: {process.env.EXPO_PUBLIC_API_URL}
+            2. API URL: {getApiUrl()}
           </ThemedText>
         </View>
       </SafeAreaView>

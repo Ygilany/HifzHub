@@ -13,5 +13,5 @@ export default function TabLayout() {
         <Label>Explore</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
-  )
+  );
 }
