@@ -9,10 +9,15 @@
     "start": "turbo run start",
     "android": "turbo run android",
     "ios": "turbo run ios",
-    "web": "turbo run web"
+    "web": "turbo run web",
+    "db:generate": "turbo run db:generate --filter=@hifzhub/database",
+    "db:migrate": "turbo run db:migrate --filter=@hifzhub/database",
+    "db:push": "turbo run db:push --filter=@hifzhub/database --ui tui",
+    "db:studio": "turbo run db:studio --filter=@hifzhub/database",
+    "db:seed": "turbo run db:seed --filter=@hifzhub/database"
   },
   "devDependencies": {
-    "turbo": "^2.3.0"
+    "turbo": "^2.6.1"
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {
