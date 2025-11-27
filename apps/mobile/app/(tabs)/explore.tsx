@@ -10,8 +10,8 @@ export default function ProfileScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
-  const cardBackground = useThemeColor({ light: '#fff', dark: '#1c1c1e' }, 'background');
-  const borderColor = useThemeColor({ light: '#e5e7eb', dark: '#38383a' }, 'text');
+  const cardBackground = useThemeColor({}, 'card');
+  const borderColor = useThemeColor({}, 'border');
 
   const { user, signOut } = useAuth();
 

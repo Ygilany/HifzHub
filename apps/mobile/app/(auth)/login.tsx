@@ -22,6 +22,8 @@ export default function LoginScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
+  const borderColor = useThemeColor({}, 'border');
+  const mutedForeground = useThemeColor({}, 'mutedForeground');
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -70,9 +72,9 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <ThemedText style={styles.label}>Email</ThemedText>
               <TextInput
-                style={[styles.input, { color: textColor, borderColor: '#e5e7eb' }]}
+                style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
                 placeholder="Enter your email"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={mutedForeground}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -84,9 +86,9 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <ThemedText style={styles.label}>Password</ThemedText>
               <TextInput
-                style={[styles.input, { color: textColor, borderColor: '#e5e7eb' }]}
+                style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
                 placeholder="Enter your password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={mutedForeground}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry

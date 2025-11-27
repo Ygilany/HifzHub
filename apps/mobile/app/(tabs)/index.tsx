@@ -8,6 +8,7 @@ import { getApiUrl } from '@/lib/trpc/provider';
 
 export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
+  const borderColor = useThemeColor({}, 'border');
 
   // Fetch data using tRPC
   const { data: students, isLoading: studentsLoading, error: studentsError } = api.test.getStudents.useQuery();
@@ -69,7 +70,7 @@ export default function HomeScreen() {
         </ThemedText>
 
         {students?.map((student) => (
-          <ThemedView key={student.id} style={styles.card}>
+          <ThemedView key={student.id} style={[styles.card, { borderColor }]}>
             <ThemedText type="defaultSemiBold" style={styles.studentName}>
               {student.name}
             </ThemedText>
@@ -78,7 +79,7 @@ export default function HomeScreen() {
               Class: {student.className}
             </ThemedText>
 
-            <View style={styles.statsRow}>
+            <View style={[styles.statsRow, { borderTopColor: borderColor }]}>
               <View style={styles.stat}>
                 <ThemedText style={styles.statLabel}>Pages</ThemedText>
                 <ThemedText style={styles.statValue}>
@@ -152,7 +153,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
   studentName: {
     fontSize: 18,
@@ -173,7 +173,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
   },
   stat: {
     alignItems: 'center',
