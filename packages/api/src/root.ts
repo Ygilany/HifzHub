@@ -4,6 +4,7 @@
 
 import { router } from './trpc';
 import { testRouter } from './routers/test';
+import { authRouter } from './routers/auth';
 
 /**
  * This is the primary router for your server.
@@ -11,6 +12,7 @@ import { testRouter } from './routers/test';
  */
 export const appRouter = router({
   test: testRouter,
+  auth: authRouter,
 });
 
 // Export type definition of API
