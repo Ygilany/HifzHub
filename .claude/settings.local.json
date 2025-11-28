@@ -6,7 +6,9 @@
       "Bash(pnpm --filter=@hifzhub/api typecheck:*)",
       "Bash(pnpm --filter=@hifzhub/database typecheck:*)",
       "Bash(pnpm --filter=web typecheck:*)",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "Bash(pnpm typecheck:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
