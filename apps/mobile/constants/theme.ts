@@ -23,7 +23,7 @@ export const Colors = {
   },
   dark: {
     text: '#ECEDEE',
-    background: '#000000', // Pure black for better OLED support
+    background: '#091014', // Pure black for better OLED support
     tint: tintColorDark,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',

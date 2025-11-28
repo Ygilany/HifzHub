@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/lib/auth/context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef } from 'react';
@@ -46,7 +46,7 @@ export default function HomeScreen() {
 
   // Dark mode support
   const isDark = colorScheme === 'dark';
-  const headerBackgroundColor = isDark ? '#1D3130' : '#FED7AE';
+  const headerBackgroundColor = isDark ? '#13212B' : '#FED7AE';
   const homePageImage = isDark
     ? require('@/assets/images/home-page-dark.png')
     : require('@/assets/images/home-page.png');
@@ -95,14 +95,14 @@ export default function HomeScreen() {
   // Text horizontal position - moves right as we scroll
   const greetingTranslateX = scrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [0, 30], // Move right to appear next to image
+    outputRange: [0, 10], // Move right to appear next to image
     extrapolate: 'clamp',
   });
 
   // Text vertical position
   const greetingTranslateY = scrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [140, 0], // Start below image, move up to center
+    outputRange: [140, 10], // Start below image, move up to center
     extrapolate: 'clamp',
   });
 
@@ -175,10 +175,7 @@ export default function HomeScreen() {
               }
             ]}
           >
-            Assalamu Alykom,{' '}
-            <ThemedText style={styles.userName}>
-              {user?.name || 'User Name'}
-            </ThemedText>
+            Assalamu Alykom,{' '}{user?.name || 'User Name'}
           </Animated.Text>
         </Animated.View>
       </Animated.View>
@@ -201,7 +198,7 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="calendar" size={24} color="#F59E0B" />
-              <ThemedText style={styles.sectionTitle}>Today's Schedule</ThemedText>
+              <ThemedText style={styles.sectionTitle}>Today&apos;s Schedule</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
           </View>
