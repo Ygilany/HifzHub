@@ -1,4 +1,5 @@
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 
 export default function TabLayout() {
@@ -6,11 +7,21 @@ export default function TabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Label>Home</Label>
-        <Icon sf="house.fill" drawable="custom_android_drawable" />
+        <Icon
+          src={{
+            default: <VectorIcon family={Ionicons} name="home-outline" />,
+            selected: <VectorIcon family={Ionicons} name="home" />,
+          }}
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="explore">
-        <Icon sf="person.fill" drawable="custom_settings_drawable" />
         <Label>Profile</Label>
+        <Icon
+          src={{
+            default: <VectorIcon family={Ionicons} name="person-outline" />,
+            selected: <VectorIcon family={Ionicons} name="person" />,
+          }}
+        />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
