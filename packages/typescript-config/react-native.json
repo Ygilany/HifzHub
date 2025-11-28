@@ -1,8 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "display": "React Native",
-  "extends": "expo/tsconfig.base",
+  "extends": "./base.json",
   "compilerOptions": {
+    "jsx": "react-native",
+    "lib": ["ES2022", "ESNext"],
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true
