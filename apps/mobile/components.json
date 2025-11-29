@@ -1,0 +1,21 @@
+{
+  "$schema": "https://nativeui.io/schema.json",
+  "style": "default",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.js",
+    "css": "app/global.css",
+    "baseColor": "zinc",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "lib": "@/lib"
+  },
+  "registries": {
+    "@nativeui": "https://nativeui.io/registry/{name}.json"
+  }
+}
