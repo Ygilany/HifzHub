@@ -1,29 +1,24 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Button, InputField } from '@/components/ui';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/lib/auth/context';
 import { api } from '@/lib/trpc/client';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const router = useRouter();
   const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
-  const borderColor = useThemeColor({}, 'border');
-  const mutedForeground = useThemeColor({}, 'mutedForeground');
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -69,48 +64,31 @@ export default function LoginScreen() {
           </ThemedView>
 
           <ThemedView style={styles.form}>
-            <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Email</ThemedText>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
-                placeholder="Enter your email"
-                placeholderTextColor={mutedForeground}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loginMutation.isPending}
-              />
-            </View>
+            <InputField
+              label="Email"
+              placeholder="Enter your email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loginMutation.isPending}
+            />
 
-            <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Password</ThemedText>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
-                placeholder="Enter your password"
-                placeholderTextColor={mutedForeground}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!loginMutation.isPending}
-              />
-            </View>
+            <InputField
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!loginMutation.isPending}
+            />
 
-            <TouchableOpacity
-              style={[
-                styles.button,
-                { backgroundColor: tintColor },
-                loginMutation.isPending && styles.buttonDisabled,
-              ]}
+            <Button
+              title="Sign In"
               onPress={handleLogin}
+              loading={loginMutation.isPending}
               disabled={loginMutation.isPending}
-            >
-              {loginMutation.isPending ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <ThemedText style={styles.buttonText}>Sign In</ThemedText>
-              )}
-            </TouchableOpacity>
+            />
 
             <TouchableOpacity
               style={styles.linkButton}
@@ -155,36 +133,6 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  button: {
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   linkButton: {
     marginTop: 20,

@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import {
   View,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Button, InputField } from '@/components/ui';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { api } from '@/lib/trpc/client';
 import { Picker } from '@react-native-picker/picker';
@@ -33,7 +32,6 @@ export default function RegisterScreen() {
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({}, 'border');
-  const mutedForeground = useThemeColor({}, 'mutedForeground');
   const { signIn } = useAuth();
 
   const [name, setName] = useState('');
@@ -87,44 +85,32 @@ export default function RegisterScreen() {
             </ThemedView>
 
             <ThemedView style={styles.form}>
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Full Name</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
-                  placeholder="Enter your full name"
-                  placeholderTextColor={mutedForeground}
-                  value={name}
-                  onChangeText={setName}
-                  editable={!registerMutation.isPending}
-                />
-              </View>
+              <InputField
+                label="Full Name"
+                placeholder="Enter your full name"
+                value={name}
+                onChangeText={setName}
+                editable={!registerMutation.isPending}
+              />
 
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Email</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
-                  placeholder="Enter your email"
-                  placeholderTextColor={mutedForeground}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!registerMutation.isPending}
-                />
-              </View>
+              <InputField
+                label="Email"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!registerMutation.isPending}
+              />
 
-              <View style={styles.inputContainer}>
-                <ThemedText style={styles.label}>Password</ThemedText>
-                <TextInput
-                  style={[styles.input, { color: textColor, borderColor, backgroundColor }]}
-                  placeholder="Create a password (min 6 characters)"
-                  placeholderTextColor={mutedForeground}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  editable={!registerMutation.isPending}
-                />
-              </View>
+              <InputField
+                label="Password"
+                placeholder="Create a password (min 6 characters)"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!registerMutation.isPending}
+              />
 
               <View style={styles.inputContainer}>
                 <ThemedText style={styles.label}>Role</ThemedText>
@@ -142,21 +128,12 @@ export default function RegisterScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  { backgroundColor: tintColor },
-                  registerMutation.isPending && styles.buttonDisabled,
-                ]}
+              <Button
+                title="Sign Up"
                 onPress={handleRegister}
+                loading={registerMutation.isPending}
                 disabled={registerMutation.isPending}
-              >
-                {registerMutation.isPending ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <ThemedText style={styles.buttonText}>Sign Up</ThemedText>
-                )}
-              </TouchableOpacity>
+              />
 
               <TouchableOpacity
                 style={styles.linkButton}
@@ -215,32 +192,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
   },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
   pickerContainer: {
     borderWidth: 1,
     borderRadius: 8,
     overflow: 'hidden',
-  },
-  button: {
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   linkButton: {
     marginTop: 20,

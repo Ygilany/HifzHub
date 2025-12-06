@@ -4,15 +4,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/lib/auth/context';
+import { Avatar, MenuItem } from '@/components/profile';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function ProfileScreen() {
   const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
-  const cardBackground = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-
   const { user, signOut } = useAuth();
 
   const handleLogout = () => {
@@ -47,11 +44,7 @@ export default function ProfileScreen() {
       <ScrollView style={styles.container}>
         {/* Header */}
         <ThemedView style={styles.header}>
-          <View style={[styles.avatarContainer, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.avatarText}>
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </ThemedText>
-          </View>
+          <Avatar name={user?.name} size={80} />
           <ThemedText type="title" style={styles.userName}>
             {user?.name || 'User'}
           </ThemedText>
@@ -69,29 +62,9 @@ export default function ProfileScreen() {
             Account
           </ThemedText>
 
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: cardBackground, borderColor }]}
-          >
-            <IconSymbol name="person.fill" size={20} color={textColor} />
-            <ThemedText style={styles.menuItemText}>Edit Profile</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color={textColor} style={styles.chevron} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: cardBackground, borderColor }]}
-          >
-            <IconSymbol name="bell.fill" size={20} color={textColor} />
-            <ThemedText style={styles.menuItemText}>Notifications</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color={textColor} style={styles.chevron} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: cardBackground, borderColor }]}
-          >
-            <IconSymbol name="lock.fill" size={20} color={textColor} />
-            <ThemedText style={styles.menuItemText}>Privacy & Security</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color={textColor} style={styles.chevron} />
-          </TouchableOpacity>
+          <MenuItem icon="person.fill" label="Edit Profile" />
+          <MenuItem icon="bell.fill" label="Notifications" />
+          <MenuItem icon="lock.fill" label="Privacy & Security" />
         </ThemedView>
 
         {/* App Section */}
@@ -100,21 +73,8 @@ export default function ProfileScreen() {
             App
           </ThemedText>
 
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: cardBackground, borderColor }]}
-          >
-            <IconSymbol name="questionmark.circle.fill" size={20} color={textColor} />
-            <ThemedText style={styles.menuItemText}>Help & Support</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color={textColor} style={styles.chevron} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: cardBackground, borderColor }]}
-          >
-            <IconSymbol name="info.circle.fill" size={20} color={textColor} />
-            <ThemedText style={styles.menuItemText}>About</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color={textColor} style={styles.chevron} />
-          </TouchableOpacity>
+          <MenuItem icon="questionmark.circle.fill" label="Help & Support" />
+          <MenuItem icon="info.circle.fill" label="About" />
         </ThemedView>
 
         {/* Logout Button */}
@@ -149,22 +109,10 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
     paddingHorizontal: 20,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
   userName: {
     fontSize: 24,
     fontWeight: 'bold',
+    marginTop: 16,
     marginBottom: 4,
   },
   userEmail: {
@@ -189,22 +137,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  menuItemText: {
-    fontSize: 16,
-    marginLeft: 12,
-    flex: 1,
-  },
-  chevron: {
-    opacity: 0.4,
   },
   logoutButton: {
     flexDirection: 'row',
