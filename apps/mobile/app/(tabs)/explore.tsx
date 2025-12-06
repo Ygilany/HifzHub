@@ -1,11 +1,11 @@
-import { ScrollView, StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Avatar, MenuItem } from '@/components/profile';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/lib/auth/context';
-import { Avatar, MenuItem } from '@/components/profile';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const backgroundColor = useThemeColor({}, 'background');
