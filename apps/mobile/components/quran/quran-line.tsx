@@ -1,197 +1,189 @@
+/**
+ * QuranLine - Skia-based Quranic line rendering with proper justification
+ * Uses DigitalKhatt variable font features for letter stretching
+ * 
+ * Note: This component requires a development build (not Expo Go)
+ * to access Skia's native rendering capabilities.
+ */
+
 import React, { useMemo } from 'react';
 import {
   Paragraph,
   Skia,
-  TextHeightBehavior,
   TextDirection,
+  TextHeightBehavior,
   SkTextStyle,
+  SkTypefaceFontProvider,
 } from '@shopify/react-native-skia';
-import { quranService, tajweedService, PAGE_WIDTH, FONTSIZE, MARGIN, SPACEWIDTH, useQuranFont } from '@/lib/quran';
+import {
+  JustService,
+  JustResultByLine,
+  SPACEWIDTH,
+  SpaceType,
+  analyzeText,
+} from '@/lib/quran/just-service';
 
-// Paragraph style for RTL text
 const lineParStyle = {
   textHeightBehavior: TextHeightBehavior.DisableAll,
   textDirection: TextDirection.RTL,
 };
 
-// Space types for word spacing
-const enum SpaceType {
-  Simple = 1,
-  Aya,
-}
-
 interface QuranLineProps {
-  pageIndex: number;
-  lineIndex: number;
+  lineText: string;
+  lineType: number; // 0 = ayah, 1 = surah_name, 2 = basmallah
+  isCentered: boolean;
+  lineWidthRatio?: number;
   pageWidth: number;
   fontSize: number;
   yPos: number;
+  margin: number;
+  fontMgr: SkTypefaceFontProvider;
 }
 
-export function QuranLine({ pageIndex, lineIndex, pageWidth, fontSize, yPos }: QuranLineProps) {
-  const fontMgr = useQuranFont();
-
-  const paragraph = useMemo(() => {
-    if (!fontMgr) return null;
-
-    const lineText = quranService.getLineText(pageIndex, lineIndex);
-    if (!lineText) return null;
-
-    const lineInfo = quranService.getLineInfo(pageIndex, lineIndex);
-    const scale = pageWidth / PAGE_WIDTH;
-    let margin = MARGIN * scale;
-    let lineWidth = pageWidth - 2 * margin;
-
-    // Adjust for special line widths
-    if (lineInfo.lineWidthRatio !== 1) {
-      const newLineWidth = lineWidth * lineInfo.lineWidthRatio;
-      margin += (lineWidth - newLineWidth) / 2;
-      lineWidth = newLineWidth;
+export function QuranLine({
+  lineText,
+  lineType,
+  isCentered,
+  lineWidthRatio = 1,
+  pageWidth,
+  fontSize,
+  yPos,
+  margin,
+  fontMgr,
+}: QuranLineProps) {
+  const lineWidth = pageWidth - 2 * margin;
+  const fontSizeLineWidthRatio = fontSize / lineWidth;
+  
+  // Analyze text to identify words and spaces
+  const lineTextInfo = useMemo(() => analyzeText(lineText), [lineText]);
+  
+  // Calculate justification result
+  const justResult = useMemo((): JustResultByLine => {
+    // Surah names and basmallah don't need justification
+    if (lineType === 1 || lineType === 2) {
+      return {
+        fontFeatures: new Map(),
+        simpleSpacing: SPACEWIDTH,
+        ayaSpacing: SPACEWIDTH,
+        fontSizeRatio: 1,
+      };
     }
-
-    // Get tajweed coloring
-    const tajweedInfo = tajweedService.getTajweed(pageIndex, lineIndex, lineText);
-
-    // Analyze text for spacing
-    const textInfo = analyzeText(lineText);
-
-    // Base text style
+    
+    // Apply justification
+    const justService = new JustService(
+      lineTextInfo,
+      fontMgr,
+      fontSizeLineWidthRatio,
+      lineWidthRatio,
+      lineText
+    );
+    const result = justService.justifyLine();
+    justService.dispose();
+    
+    return result;
+  }, [lineText, lineType, lineTextInfo, fontMgr, fontSizeLineWidthRatio, lineWidthRatio]);
+  
+  // Build the paragraph
+  const { paragraph, xPos } = useMemo(() => {
+    const scale = (fontSize * justResult.fontSizeRatio) / 1000;
+    
     const textStyle: SkTextStyle = {
       color: Skia.Color('black'),
-      fontFamilies: ['digitalkhatt'],
-      fontSize: fontSize,
+      fontFamilies: ['DigitalKhatt'],
+      fontSize: justResult.fontSizeRatio * fontSize,
     };
-
-    // Add basmallah font feature for basmallah lines (except on pages 1-2)
-    if (lineInfo.lineType === 2 && pageIndex !== 0 && pageIndex !== 1) {
+    
+    // Special handling for basmallah
+    if (lineType === 2) {
       textStyle.fontFeatures = [{ name: 'basm', value: 1 }];
     }
-
-    // Build paragraph with tajweed colors
-    const paragraphBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
+    
+    let paragraphBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
     paragraphBuilder.pushStyle(textStyle);
-
-    for (let wordIndex = 0; wordIndex < textInfo.wordInfos.length; wordIndex++) {
-      const wordInfo = textInfo.wordInfos[wordIndex];
-      if (!wordInfo) continue;
-
-      // Add each character with potential tajweed coloring
+    
+    // Build text with font features and spacing
+    for (let wordIndex = 0; wordIndex < lineTextInfo.wordInfos.length; wordIndex++) {
+      const wordInfo = lineTextInfo.wordInfos[wordIndex];
+      
+      // Add each character with its font features
       for (let i = wordInfo.startIndex; i <= wordInfo.endIndex; i++) {
         const char = lineText.charAt(i);
-        const tajweedColor = tajweedInfo.get(i);
-
-        if (tajweedColor) {
-          const newTextStyle: SkTextStyle = {
+        const justInfo = justResult.fontFeatures.get(i);
+        
+        if (justInfo) {
+          const newtextStyle: SkTextStyle = {
             ...textStyle,
-            color: Skia.Color(tajweedService.getColorHex(tajweedColor)),
+            fontFeatures: justInfo,
           };
-          paragraphBuilder.pushStyle(newTextStyle);
+          
+          paragraphBuilder.pushStyle(newtextStyle);
           paragraphBuilder.addText(char);
           paragraphBuilder.pop();
         } else {
           paragraphBuilder.addText(char);
         }
       }
-
-      // Add space after word with appropriate spacing
-      const spaceType = textInfo.spaces.get(wordInfo.endIndex + 1);
+      
+      // Add space with appropriate spacing
+      const spaceType = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
       if (spaceType !== undefined) {
-        const defaultSpaceWidth = SPACEWIDTH * (fontSize / FONTSIZE);
-        let letterSpacing = 0;
-
-        if (spaceType === SpaceType.Aya) {
-          // Larger spacing around ayah markers
-          letterSpacing = defaultSpaceWidth * 2;
-        }
-
-        const spaceStyle: SkTextStyle = {
+        const newtextStyle: SkTextStyle = {
           ...textStyle,
-          letterSpacing: letterSpacing,
         };
-        paragraphBuilder.pushStyle(spaceStyle);
+        
+        if (spaceType === SpaceType.Aya) {
+          newtextStyle.letterSpacing = (justResult.ayaSpacing - SPACEWIDTH) * scale;
+        } else if (spaceType === SpaceType.Simple) {
+          newtextStyle.letterSpacing = (justResult.simpleSpacing - SPACEWIDTH) * scale;
+        }
+        
+        paragraphBuilder.pushStyle(newtextStyle);
         paragraphBuilder.addText(' ');
         paragraphBuilder.pop();
       }
     }
-
-    paragraphBuilder.pop();
-    const paragraph = paragraphBuilder.build();
-
-    // Layout with max width
+    
     const maxWidth = pageWidth * 2;
-    paragraph.layout(maxWidth);
-
-    return { paragraph, lineInfo, margin, maxWidth };
-  }, [fontMgr, pageIndex, lineIndex, pageWidth, fontSize]);
-
-  if (!fontMgr || !paragraph) {
-    return null;
-  }
-
-  const { paragraph: p, lineInfo, margin, maxWidth } = paragraph;
-  const currLineWidth = p.getLongestLine();
-
-  // Calculate x position
-  let xMargin = margin;
-  if (lineInfo.lineType === 1 || (lineInfo.lineType === 2 && pageIndex !== 0 && pageIndex !== 1)) {
+    
+    paragraphBuilder.pop();
+    let para = paragraphBuilder.build();
+    para.layout(maxWidth);
+    
+    const currLineWidth = para.getLongestLine();
+    
+    // Calculate x position
+    let effectiveMargin = margin;
+    
     // Center surah names and basmallah
-    xMargin = (pageWidth - currLineWidth) / 2;
-  }
-
-  const xPos = -(maxWidth - pageWidth + xMargin);
-
+    if (lineType === 1 || lineType === 2 || isCentered) {
+      effectiveMargin = (pageWidth - currLineWidth) / 2;
+    }
+    
+    const x = -(maxWidth - pageWidth + effectiveMargin);
+    
+    paragraphBuilder.dispose();
+    
+    return { paragraph: para, xPos: x };
+  }, [
+    lineText,
+    lineType,
+    isCentered,
+    lineTextInfo,
+    justResult,
+    fontMgr,
+    fontSize,
+    pageWidth,
+    margin,
+  ]);
+  
   return (
     <Paragraph
-      paragraph={p}
+      paragraph={paragraph}
       x={xPos}
       y={yPos}
-      width={maxWidth}
+      width={pageWidth * 2}
     />
   );
-}
-
-// Helper function to analyze text for word boundaries and spacing
-interface WordInfo {
-  startIndex: number;
-  endIndex: number;
-  text: string;
-}
-
-interface TextInfo {
-  wordInfos: WordInfo[];
-  spaces: Map<number, SpaceType>;
-}
-
-function analyzeText(lineText: string): TextInfo {
-  const wordInfos: WordInfo[] = [];
-  const spaces = new Map<number, SpaceType>();
-
-  let currentWord: WordInfo = { text: '', startIndex: 0, endIndex: -1 };
-  wordInfos.push(currentWord);
-
-  for (let i = 0; i < lineText.length; i++) {
-    const char = lineText.charAt(i);
-    if (char === ' ') {
-      // Check if this is an ayah space (after Arabic-Indic digits or before ayah end marker)
-      const prevCharCode = lineText.charCodeAt(i - 1);
-      const nextCharCode = lineText.charCodeAt(i + 1);
-      
-      // Arabic-Indic digits are U+0660 to U+0669, Ayah marker is U+06DD
-      if ((prevCharCode >= 0x0660 && prevCharCode <= 0x0669) || nextCharCode === 0x06DD) {
-        spaces.set(i, SpaceType.Aya);
-      } else {
-        spaces.set(i, SpaceType.Simple);
-      }
-
-      currentWord = { text: '', startIndex: i + 1, endIndex: i };
-      wordInfos.push(currentWord);
-    } else {
-      currentWord.text += char;
-      currentWord.endIndex = i;
-    }
-  }
-
-  return { wordInfos, spaces };
 }
 
 export default QuranLine;

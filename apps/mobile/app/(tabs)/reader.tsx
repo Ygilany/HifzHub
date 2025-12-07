@@ -19,6 +19,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Page dimensions
 const PAGE_WIDTH = SCREEN_WIDTH;
+const PAGE_HEIGHT = SCREEN_HEIGHT;
 
 // Cream/parchment background color for consistency
 const PAGE_BACKGROUND = '#FFFEF5';
@@ -77,10 +78,11 @@ export default function ReaderScreen() {
   // Render a single page
   const renderPage = useCallback(({ item: pageIndex }: { item: number }) => {
     return (
-      <View style={[styles.pageWrapper, { width: PAGE_WIDTH }]}>
+      <View style={[styles.pageWrapper, { width: PAGE_WIDTH, height: PAGE_HEIGHT }]}>
         <QuranPage
           pageIndex={pageIndex}
           pageWidth={PAGE_WIDTH}
+          pageHeight={PAGE_HEIGHT}
           topPadding={headerPadding}
           bottomPadding={footerPadding}
         />
