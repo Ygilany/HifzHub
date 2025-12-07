@@ -1,15 +1,17 @@
 /**
  * NativeQuranLine - Native Text-based line with word-level long-press support
+ * Uses adjustsFontSizeToFit to ensure consistent layout across all lines
  */
 
-import React, { useState, useCallback, useRef } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  Pressable,
-} from 'react-native';
 import * as Haptics from 'expo-haptics';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { WordPickerModal } from './word-picker-modal';
 import { WordTooltip } from './word-tooltip';
 
 interface NativeQuranLineProps {
@@ -28,6 +30,7 @@ interface TooltipState {
   wordIndex: number;
 }
 
+
 export function NativeQuranLine({
   lineText,
   fontSize,
@@ -42,28 +45,36 @@ export function NativeQuranLine({
     position: { x: 0, y: 0, width: 0 },
     wordIndex: -1,
   });
+  const [showWordPicker, setShowWordPicker] = useState(false);
+  const lineRef = useRef<View>(null);
 
-  // Split line into words
-  const words = lineText.split(' ').filter(w => w.length > 0);
-  
-  // Refs for measuring word positions
-  const wordRefs = useRef<(View | null)[]>([]);
+  // Split line into words for selection
+  const words = useMemo(() => lineText.split(' ').filter(w => w.length > 0), [lineText]);
 
-  const handleWordLongPress = useCallback((wordIndex: number) => {
+  const handleLongPress = useCallback(() => {
     // Trigger haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    // Measure the word's position
-    const wordRef = wordRefs.current[wordIndex];
-    if (wordRef) {
-      wordRef.measureInWindow((x, y, width, height) => {
-        setTooltip({
-          visible: true,
-          position: { x, y, width },
-          wordIndex,
-        });
+    // Show word picker modal
+    setShowWordPicker(true);
+  }, []);
+
+  const handleWordSelected = useCallback((wordIndex: number) => {
+    setShowWordPicker(false);
+    
+    // Show tooltip for the selected word
+    // Position it in the center of the line
+    lineRef.current?.measureInWindow((x, y, width) => {
+      setTooltip({
+        visible: true,
+        position: { 
+          x: x + width / 2 - 30, // Center approximately
+          y: y,
+          width: 60,
+        },
+        wordIndex,
       });
-    }
+    });
   }, []);
 
   const handleCloseTooltip = useCallback(() => {
@@ -80,12 +91,22 @@ export function NativeQuranLine({
     // TODO: Implement Tajweed functionality
   }, [tooltip.wordIndex, words]);
 
-  // For special lines (surah name, basmallah) or short lines, use simple Text
+  // For special lines (surah name, basmallah), use simple centered Text
   const isSpecialLine = isSurahName || isBasmallah;
-  
-  if (isSpecialLine) {
-    return (
-      <View style={[styles.lineContainer, { width: contentWidth }]}>
+
+  return (
+    <View 
+      ref={lineRef}
+      style={[styles.lineContainer, { width: contentWidth }]}
+    >
+      <Pressable
+        onLongPress={handleLongPress}
+        delayLongPress={400}
+        style={({ pressed }) => [
+          styles.linePressable,
+          pressed && styles.linePressed,
+        ]}
+      >
         <Text
           style={[
             styles.arabicText,
@@ -94,54 +115,24 @@ export function NativeQuranLine({
               lineHeight,
               width: contentWidth,
             },
-            styles.centeredLine,
+            isCentered || isSpecialLine ? styles.centeredLine : styles.rightAlignedLine,
             isSurahName && styles.surahName,
             isBasmallah && styles.basmallah,
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.5}
         >
           {lineText}
         </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.lineContainer, { width: contentWidth }]}>
-      <View
-        style={[
-          styles.wordsContainer,
-          {
-            width: contentWidth,
-          },
-          isCentered ? styles.centeredWords : styles.justifiedWords,
-        ]}
-      >
-        {words.map((word, index) => (
-          <Pressable
-            key={index}
-            ref={(ref) => { wordRefs.current[index] = ref; }}
-            onLongPress={() => handleWordLongPress(index)}
-            delayLongPress={350}
-            style={({ pressed }) => [
-              styles.wordPressable,
-              pressed && styles.wordPressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.arabicText,
-                {
-                  fontSize,
-                  lineHeight,
-                },
-              ]}
-            >
-              {word}
-              {index < words.length - 1 ? ' ' : ''}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      </Pressable>
+      
+      <WordPickerModal
+        visible={showWordPicker}
+        words={words}
+        onSelectWord={handleWordSelected}
+        onClose={() => setShowWordPicker(false)}
+      />
       
       <WordTooltip
         visible={tooltip.visible}
@@ -158,27 +149,20 @@ const styles = StyleSheet.create({
   lineContainer: {
     alignItems: 'stretch',
   },
-  wordsContainer: {
-    flexDirection: 'row-reverse', // RTL
-    flexWrap: 'wrap',
+  linePressable: {
+    // Full width touchable area
   },
-  justifiedWords: {
-    justifyContent: 'flex-start', // Start from right in RTL
-  },
-  centeredWords: {
-    justifyContent: 'center',
-  },
-  wordPressable: {
-    // Inline display
-  },
-  wordPressed: {
-    backgroundColor: 'rgba(26, 95, 74, 0.1)',
+  linePressed: {
+    backgroundColor: 'rgba(26, 95, 74, 0.05)',
     borderRadius: 4,
   },
   arabicText: {
     fontFamily: 'DigitalKhatt',
     color: '#1a1a1a',
     writingDirection: 'rtl',
+  },
+  rightAlignedLine: {
+    textAlign: 'right',
   },
   centeredLine: {
     textAlign: 'center',
@@ -194,4 +178,3 @@ const styles = StyleSheet.create({
 });
 
 export default NativeQuranLine;
-

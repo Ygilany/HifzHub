@@ -25,7 +25,7 @@ const PAGE_HEIGHT = SCREEN_HEIGHT;
 const PAGE_BACKGROUND = '#FFFEF5';
 
 // Layout heights for padding calculations
-const HEADER_CONTENT_HEIGHT = 44; // Just the navigation row
+const HEADER_CONTENT_HEIGHT = 32; // Compact navigation row
 const TAB_BAR_HEIGHT = 85; // Native tab bar height
 
 export default function ReaderScreen() {
@@ -71,9 +71,9 @@ export default function ReaderScreen() {
   }).current;
 
   // Fixed padding for content to avoid header/footer overlap
-  // Header: insets.top + 8 (paddingTop) + HEADER_CONTENT_HEIGHT + 12 (paddingBottom) + margin
-  const headerPadding = insets.top + 8 + HEADER_CONTENT_HEIGHT + 12 + 16;
-  const footerPadding = TAB_BAR_HEIGHT + 30; // Tab bar + page number space
+  // Compact header: insets.top + 4 (paddingTop) + HEADER_CONTENT_HEIGHT + 8 (paddingBottom)
+  const headerPadding = insets.top + 4 + HEADER_CONTENT_HEIGHT + 8;
+  const footerPadding = TAB_BAR_HEIGHT + 16; // Tab bar + small margin
 
   // Render a single page
   const renderPage = useCallback(({ item: pageIndex }: { item: number }) => {
@@ -172,8 +172,8 @@ export default function ReaderScreen() {
         />
       </View>
 
-      {/* Header Controls - Always visible */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      {/* Header Controls - Compact, always visible */}
+      <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <View style={styles.pageNavigation}>
           <TouchableOpacity
             style={styles.navButton}
@@ -182,8 +182,8 @@ export default function ReaderScreen() {
           >
             <Ionicons
               name="chevron-back"
-              size={24}
-              color={currentPage <= 1 ? '#999' : '#333'}
+              size={20}
+              color={currentPage <= 1 ? '#bbb' : '#555'}
             />
           </TouchableOpacity>
 
@@ -207,8 +207,8 @@ export default function ReaderScreen() {
           >
             <Ionicons
               name="chevron-forward"
-              size={24}
-              color={currentPage >= TOTAL_PAGES ? '#999' : '#333'}
+              size={20}
+              color={currentPage >= TOTAL_PAGES ? '#bbb' : '#555'}
             />
           </TouchableOpacity>
         </View>
@@ -274,40 +274,40 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(255, 254, 245, 0.95)',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    backgroundColor: 'rgba(255, 254, 245, 0.92)',
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   pageNavigation: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    gap: 12,
   },
   navButton: {
-    padding: 8,
+    padding: 4,
   },
   pageInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   pageInput: {
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
     color: '#333',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 14,
     fontWeight: '600',
-    minWidth: 50,
+    minWidth: 44,
     textAlign: 'center',
   },
   pageTotal: {
-    color: '#666',
-    fontSize: 14,
+    color: '#888',
+    fontSize: 13,
   },
   pageNumberCorner: {
     position: 'absolute',

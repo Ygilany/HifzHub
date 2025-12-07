@@ -6,22 +6,22 @@
  * to access Skia's native rendering capabilities.
  */
 
-import React, { useMemo } from 'react';
 import {
-  Paragraph,
-  Skia,
-  TextDirection,
-  TextHeightBehavior,
-  SkTextStyle,
-  SkTypefaceFontProvider,
-} from '@shopify/react-native-skia';
-import {
-  JustService,
   JustResultByLine,
+  JustService,
   SPACEWIDTH,
   SpaceType,
   analyzeText,
 } from '@/lib/quran/just-service';
+import {
+  Paragraph,
+  SkTextStyle,
+  SkTypefaceFontProvider,
+  Skia,
+  TextDirection,
+  TextHeightBehavior,
+} from '@shopify/react-native-skia';
+import React, { useMemo } from 'react';
 
 const lineParStyle = {
   textHeightBehavior: TextHeightBehavior.DisableAll,
@@ -104,6 +104,7 @@ export function QuranLine({
     // Build text with font features and spacing
     for (let wordIndex = 0; wordIndex < lineTextInfo.wordInfos.length; wordIndex++) {
       const wordInfo = lineTextInfo.wordInfos[wordIndex];
+      if (!wordInfo) continue;
       
       // Add each character with its font features
       for (let i = wordInfo.startIndex; i <= wordInfo.endIndex; i++) {

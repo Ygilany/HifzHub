@@ -5,11 +5,11 @@
  * falls back to native Text rendering in Expo Go.
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, ScrollView } from 'react-native';
+import { quranService } from '@/lib/quran';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFonts } from 'expo-font';
-import { quranService } from '@/lib/quran';
+import React, { useMemo } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { NativeQuranLine } from './native-quran-line';
 
 // Font asset
@@ -45,19 +45,24 @@ function NativeQuranPage({
   });
 
   const contentWidth = pageWidth - (HORIZONTAL_PADDING * 2);
+  const contentHeight = pageHeight - topPadding - bottomPadding;
+  const pageText = quranService.getPageText(pageIndex);
+  const numLines = pageText?.length || 15;
 
   const pageData = useMemo(() => {
-    const baseFontSize = contentWidth / 15;
+    // Calculate font size based on line width
+    // Use a smaller divisor to start with a reasonable base font that can scale down
+    const baseFontSize = contentWidth / 16;
     const fontSize = Math.round(baseFontSize);
-    const lineHeight = Math.round(fontSize * 1.65);
+    
+    // Line height is calculated to distribute lines evenly across available height
+    const lineHeight = contentHeight / numLines;
 
     return {
       fontSize,
       lineHeight,
     };
-  }, [contentWidth]);
-
-  const pageText = quranService.getPageText(pageIndex);
+  }, [contentWidth, contentHeight, numLines]);
 
   if (!fontsLoaded) {
     return (
@@ -77,15 +82,17 @@ function NativeQuranPage({
   }
 
   return (
-    <ScrollView 
-      style={[styles.scrollContainer, { width: pageWidth }]}
-      contentContainerStyle={[
-        styles.scrollContent, 
-        { paddingTop: topPadding, paddingBottom: bottomPadding }
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.contentContainer, { paddingHorizontal: HORIZONTAL_PADDING }]}>
+    <View style={[styles.pageContentContainer, { width: pageWidth, height: pageHeight }]}>
+      <View 
+        style={[
+          styles.contentContainer, 
+          { 
+            paddingHorizontal: HORIZONTAL_PADDING,
+            paddingTop: topPadding,
+            paddingBottom: bottomPadding,
+          }
+        ]}
+      >
         {pageText.map((line, lineIndex) => {
           const lineInfo = quranService.getLineInfo(pageIndex, lineIndex);
           
@@ -108,7 +115,7 @@ function NativeQuranPage({
           );
         })}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -209,7 +216,7 @@ if (!isExpoGo) {
 
             // Build paragraph
             const scale = (layout.fontSize * justResult.fontSizeRatio) / 1000;
-            const textStyle = {
+            const textStyle: Record<string, any> = {
               color: Skia.Color('black'),
               fontFamilies: ['DigitalKhatt'],
               fontSize: justResult.fontSizeRatio * layout.fontSize,
@@ -311,12 +318,8 @@ const styles = StyleSheet.create({
   canvas: {
     flex: 1,
   },
-  scrollContainer: {
-    flex: 1,
+  pageContentContainer: {
     backgroundColor: '#FFFEF5',
-  },
-  scrollContent: {
-    flexGrow: 1,
   },
   pageContainer: {
     flex: 1,
