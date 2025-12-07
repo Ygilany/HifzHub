@@ -1,30 +1,26 @@
-import * as SQLite from 'expo-sqlite';
-import { Paths, Directory, File } from 'expo-file-system';
 import { Asset } from 'expo-asset';
+import { Directory, File, Paths } from 'expo-file-system';
+import * as SQLite from 'expo-sqlite';
 import {
-  PageLine,
-  Verse,
-  Word,
+  BASMALLAH,
   LineInfo,
   PageData,
+  PageLine,
   SURAH_NAMES,
-  BASMALLAH,
-  LINES_PER_PAGE,
   TOTAL_PAGES,
 } from './types';
 
 // Assets - using require for asset bundling
-const LAYOUT_DB_ASSET = require('@/assets/quran/qpc-v4-tajweed-15-lines.db');
-const TEXT_DB_ASSET = require('@/assets/quran/digital-khatt-v2.db');
+const LAYOUT_DB_ASSET = require('@/assets/quran/digital-khatt-15-lines.db');
+const WORDS_DB_ASSET = require('@/assets/quran/digital-khatt-v2.db');
 
 class QuranService {
   private layoutDb: SQLite.SQLiteDatabase | null = null;
-  private textDb: SQLite.SQLiteDatabase | null = null;
+  private wordsDb: SQLite.SQLiteDatabase | null = null;
   private isInitialized = false;
   
   // Cached data
-  private verses: Map<string, Verse> = new Map(); // keyed by verse_key (e.g., "1:1")
-  private words: Word[] = []; // All words with global index
+  private words: Map<number, string> = new Map(); // keyed by word ID
   private pageLines: Map<number, PageLine[]> = new Map(); // keyed by page number
   private quranText: string[][] = []; // [pageIndex][lineIndex] = text
   private lineInfoCache: Map<string, LineInfo> = new Map();
@@ -42,8 +38,12 @@ class QuranService {
       await sqliteDir.create();
     }
     
-    // Check if database already exists
-    if (!dbFile.exists && asset.localUri) {
+    // Always update the database to ensure we have the latest version
+    if (asset.localUri) {
+      // Delete existing database if it exists
+      if (dbFile.exists) {
+        await dbFile.delete();
+      }
       // Copy asset to document directory
       const sourceFile = new File(asset.localUri);
       await sourceFile.copy(dbFile);
@@ -57,16 +57,15 @@ class QuranService {
 
     try {
       // Load database assets to document directory
-      const layoutDbName = await this.loadDatabaseAsset(LAYOUT_DB_ASSET, 'qpc-v4-tajweed-15-lines.db');
-      const textDbName = await this.loadDatabaseAsset(TEXT_DB_ASSET, 'digital-khatt-v2.db');
+      const layoutDbName = await this.loadDatabaseAsset(LAYOUT_DB_ASSET, 'digital-khatt-15-lines.db');
+      const wordsDbName = await this.loadDatabaseAsset(WORDS_DB_ASSET, 'digital-khatt-v2.db');
       
       // Open databases
       this.layoutDb = await SQLite.openDatabaseAsync(layoutDbName);
-      this.textDb = await SQLite.openDatabaseAsync(textDbName);
+      this.wordsDb = await SQLite.openDatabaseAsync(wordsDbName);
 
       // Load all data
-      await this.loadVerses();
-      await this.buildWordIndex();
+      await this.loadWords();
       await this.loadPageLines();
       await this.buildQuranText();
 
@@ -78,52 +77,35 @@ class QuranService {
     }
   }
 
-  private async loadVerses(): Promise<void> {
-    if (!this.textDb) throw new Error('Text database not initialized');
+  private async loadWords(): Promise<void> {
+    if (!this.wordsDb) throw new Error('Words database not initialized');
 
-    const rows = await this.textDb.getAllAsync<{
+    // Load words directly from the words table
+    const rows = await this.wordsDb.getAllAsync<{
       id: number;
-      verse_key: string;
+      location: string;
       surah: number;
       ayah: number;
+      word: number;
       text: string;
-    }>('SELECT id, verse_key, surah, ayah, text FROM verses ORDER BY id');
+    }>('SELECT id, location, surah, ayah, word, text FROM words ORDER BY id');
 
     for (const row of rows) {
-      this.verses.set(row.verse_key, {
-        id: row.id,
-        verseKey: row.verse_key,
-        surah: row.surah,
-        ayah: row.ayah,
-        text: row.text,
-      });
+      this.words.set(row.id, row.text);
     }
 
-    console.log(`Loaded ${this.verses.size} verses`);
-  }
-
-  private async buildWordIndex(): Promise<void> {
-    // Build a global word index by splitting all verses into words
-    let wordId = 1;
-
-    for (const [verseKey, verse] of this.verses) {
-      // Split verse text into words (space-separated)
-      const wordsInVerse = verse.text.split(/\s+/).filter(w => w.length > 0);
-      let position = 1;
-
-      for (const wordText of wordsInVerse) {
-        this.words.push({
-          id: wordId,
-          text: wordText,
-          verseKey: verseKey,
-          position: position,
-        });
-        wordId++;
-        position++;
-      }
+    console.log(`Loaded ${this.words.size} words from database`);
+    
+    // Debug: Log first 40 words to verify alignment
+    const first40 = Array.from(this.words.entries()).slice(0, 40).map(([id, text]) => `${id}:${text}`).join(', ');
+    console.log('First 40 words:', first40);
+    
+    // Debug: Check specific words that should be on page 3, line 3 (words 97-104)
+    console.log('Words 97-110 (page 3 debug):');
+    for (let i = 97; i <= 110; i++) {
+      const word = this.words.get(i);
+      console.log(`  Word ${i}: ${word ?? 'MISSING'}`);
     }
-
-    console.log(`Built word index with ${this.words.length} words`);
   }
 
   private async loadPageLines(): Promise<void> {
@@ -175,15 +157,29 @@ class QuranService {
         } else if (line.lineType === 'basmallah') {
           lineText = BASMALLAH;
         } else if (line.lineType === 'ayah' && line.firstWordId && line.lastWordId) {
-          // Get words for this line
+          // Get words for this line from the words Map
           const lineWords: string[] = [];
           for (let wordId = line.firstWordId; wordId <= line.lastWordId; wordId++) {
-            const word = this.words[wordId - 1]; // words array is 0-indexed, wordId is 1-indexed
-            if (word) {
-              lineWords.push(word.text);
+            const wordText = this.words.get(wordId);
+            if (wordText) {
+              lineWords.push(wordText);
+            } else {
+              console.warn(`Missing word for ID ${wordId} on page ${pageNum}, line ${line.lineNumber}`);
             }
           }
           lineText = lineWords.join(' ');
+          
+          // Debug: Log page 3 lines to verify each word
+          if (pageNum === 3 && line.lineNumber <= 5) {
+            console.log(`Page 3, Line ${line.lineNumber}:`);
+            console.log(`  Word range: ${line.firstWordId}-${line.lastWordId}`);
+            console.log(`  Words found: ${lineWords.length}`);
+            console.log(`  Text: "${lineText}"`);
+            // Log individual words for this line
+            for (let wordId = line.firstWordId; wordId <= line.lastWordId; wordId++) {
+              console.log(`    Word ${wordId}: "${this.words.get(wordId) ?? 'MISSING'}"`);
+            }
+          }
         }
 
         pageText.push(lineText);
@@ -289,11 +285,6 @@ class QuranService {
 
   get nbPages(): number {
     return this.quranText.length;
-  }
-
-  // Get verse by key (e.g., "1:1")
-  getVerse(verseKey: string): Verse | undefined {
-    return this.verses.get(verseKey);
   }
 
   // Get all lines as 2D array (for compatibility with reference implementation)

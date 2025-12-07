@@ -10,29 +10,31 @@ import {
   TextInput,
   I18nManager,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { QuranPage } from '@/components/quran';
 import { quranService, TOTAL_PAGES } from '@/lib/quran';
-import { useThemeColor } from '@/hooks/use-theme-color';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Page width with some padding
+// Page dimensions
 const PAGE_WIDTH = SCREEN_WIDTH;
-const PAGE_HEIGHT = SCREEN_HEIGHT;
+
+// Cream/parchment background color for consistency
+const PAGE_BACKGROUND = '#FFFEF5';
+
+// Layout heights for padding calculations
+const HEADER_CONTENT_HEIGHT = 44; // Just the navigation row
+const TAB_BAR_HEIGHT = 85; // Native tab bar height
 
 export default function ReaderScreen() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showControls, setShowControls] = useState(true);
   const [pageInput, setPageInput] = useState('1');
   
   const flatListRef = useRef<FlatList>(null);
   const insets = useSafeAreaInsets();
-  const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
 
   // Initialize the Quran service
   useEffect(() => {
@@ -67,17 +69,24 @@ export default function ReaderScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
+  // Fixed padding for content to avoid header/footer overlap
+  // Header: insets.top + 8 (paddingTop) + HEADER_CONTENT_HEIGHT + 12 (paddingBottom) + margin
+  const headerPadding = insets.top + 8 + HEADER_CONTENT_HEIGHT + 12 + 16;
+  const footerPadding = TAB_BAR_HEIGHT + 30; // Tab bar + page number space
+
   // Render a single page
   const renderPage = useCallback(({ item: pageIndex }: { item: number }) => {
     return (
       <View style={[styles.pageWrapper, { width: PAGE_WIDTH }]}>
         <QuranPage
           pageIndex={pageIndex}
-          pageWidth={PAGE_WIDTH - 16} // Small padding on sides
+          pageWidth={PAGE_WIDTH}
+          topPadding={headerPadding}
+          bottomPadding={footerPadding}
         />
       </View>
     );
-  }, []);
+  }, [headerPadding, footerPadding]);
 
   // Navigate to a specific page
   const goToPage = useCallback((page: number) => {
@@ -99,11 +108,6 @@ export default function ReaderScreen() {
     }
   }, [pageInput, goToPage]);
 
-  // Toggle controls visibility
-  const toggleControls = useCallback(() => {
-    setShowControls(prev => !prev);
-  }, []);
-
   // Get item layout for better scroll performance
   const getItemLayout = useCallback((_: any, index: number) => ({
     length: PAGE_WIDTH,
@@ -113,9 +117,9 @@ export default function ReaderScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor }]}>
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#D4AF37" />
-        <Text style={[styles.loadingText, { color: textColor }]}>
+        <Text style={styles.loadingText}>
           Loading Quran...
         </Text>
       </View>
@@ -124,9 +128,9 @@ export default function ReaderScreen() {
 
   if (!isInitialized) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor }]}>
+      <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
         <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-        <Text style={[styles.errorText, { color: textColor }]}>
+        <Text style={styles.errorText}>
           Failed to load Quran data
         </Text>
       </View>
@@ -134,57 +138,9 @@ export default function ReaderScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#1A1A1A' }]} edges={['top']}>
-      {/* Header Controls */}
-      {showControls && (
-        <View style={[styles.header, { paddingTop: 8 }]}>
-          <View style={styles.pageNavigation}>
-            <TouchableOpacity
-              style={styles.navButton}
-              onPress={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1}
-            >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={currentPage <= 1 ? '#666' : '#FFF'}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.pageInputContainer}>
-              <TextInput
-                style={styles.pageInput}
-                value={pageInput}
-                onChangeText={setPageInput}
-                onSubmitEditing={handlePageInputSubmit}
-                keyboardType="number-pad"
-                returnKeyType="go"
-                maxLength={3}
-              />
-              <Text style={styles.pageTotal}>/ {TOTAL_PAGES}</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.navButton}
-              onPress={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= TOTAL_PAGES}
-            >
-              <Ionicons
-                name="chevron-forward"
-                size={24}
-                color={currentPage >= TOTAL_PAGES ? '#666' : '#FFF'}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
+    <View style={styles.container}>
       {/* Quran Pages */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={toggleControls}
-        style={styles.pagesContainer}
-      >
+      <View style={styles.pagesContainer}>
         <FlatList
           ref={flatListRef}
           data={pages}
@@ -212,19 +168,57 @@ export default function ReaderScreen() {
             }, 100);
           }}
         />
-      </TouchableOpacity>
+      </View>
 
-      {/* Bottom Page Indicator */}
-      {showControls && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 8 }]}>
-          <View style={styles.pageIndicator}>
-            <Text style={styles.pageIndicatorText}>
-              صفحة {convertToArabicNumerals(currentPage)}
-            </Text>
+      {/* Header Controls - Always visible */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.pageNavigation}>
+          <TouchableOpacity
+            style={styles.navButton}
+            onPress={() => goToPage(currentPage - 1)}
+            disabled={currentPage <= 1}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color={currentPage <= 1 ? '#999' : '#333'}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.pageInputContainer}>
+            <TextInput
+              style={styles.pageInput}
+              value={pageInput}
+              onChangeText={setPageInput}
+              onSubmitEditing={handlePageInputSubmit}
+              keyboardType="number-pad"
+              returnKeyType="go"
+              maxLength={3}
+            />
+            <Text style={styles.pageTotal}>/ {TOTAL_PAGES}</Text>
           </View>
+
+          <TouchableOpacity
+            style={styles.navButton}
+            onPress={() => goToPage(currentPage + 1)}
+            disabled={currentPage >= TOTAL_PAGES}
+          >
+            <Ionicons
+              name="chevron-forward"
+              size={24}
+              color={currentPage >= TOTAL_PAGES ? '#999' : '#333'}
+            />
+          </TouchableOpacity>
         </View>
-      )}
-    </SafeAreaView>
+      </View>
+
+      {/* Bottom Page Number - Small, bottom right corner */}
+      <View style={[styles.pageNumberCorner, { bottom: TAB_BAR_HEIGHT + 8, right: 16 }]}>
+        <Text style={styles.pageNumberText}>
+          {convertToArabicNumerals(currentPage)}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -237,26 +231,40 @@ function convertToArabicNumerals(num: number): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: PAGE_BACKGROUND,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    backgroundColor: PAGE_BACKGROUND,
   },
   loadingText: {
     fontSize: 16,
     fontWeight: '500',
+    color: '#666',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    backgroundColor: PAGE_BACKGROUND,
   },
   errorText: {
     fontSize: 16,
     fontWeight: '500',
+    color: '#666',
+  },
+  pagesContainer: {
+    flex: 1,
+  },
+  pageWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: PAGE_BACKGROUND,
   },
   header: {
     position: 'absolute',
@@ -264,9 +272,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(255, 254, 245, 0.95)',
     paddingHorizontal: 16,
     paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   pageNavigation: {
     flexDirection: 'row',
@@ -283,8 +293,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   pageInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    color: '#FFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    color: '#333',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -294,41 +304,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pageTotal: {
-    color: '#AAA',
+    color: '#666',
     fontSize: 14,
   },
-  pagesContainer: {
-    flex: 1,
-  },
-  pageWrapper: {
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  footer: {
+  pageNumberCorner: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    alignItems: 'center',
   },
-  pageIndicator: {
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-  },
-  pageIndicatorText: {
-    color: '#D4AF37',
-    fontSize: 16,
-    fontWeight: '600',
+  pageNumberText: {
+    color: '#8B7355',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
