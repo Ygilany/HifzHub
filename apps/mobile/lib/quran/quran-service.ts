@@ -95,17 +95,6 @@ class QuranService {
     }
 
     console.log(`Loaded ${this.words.size} words from database`);
-    
-    // Debug: Log first 40 words to verify alignment
-    const first40 = Array.from(this.words.entries()).slice(0, 40).map(([id, text]) => `${id}:${text}`).join(', ');
-    console.log('First 40 words:', first40);
-    
-    // Debug: Check specific words that should be on page 3, line 3 (words 97-104)
-    console.log('Words 97-110 (page 3 debug):');
-    for (let i = 97; i <= 110; i++) {
-      const word = this.words.get(i);
-      console.log(`  Word ${i}: ${word ?? 'MISSING'}`);
-    }
   }
 
   private async loadPageLines(): Promise<void> {
@@ -168,18 +157,6 @@ class QuranService {
             }
           }
           lineText = lineWords.join(' ');
-          
-          // Debug: Log page 3 lines to verify each word
-          if (pageNum === 3 && line.lineNumber <= 5) {
-            console.log(`Page 3, Line ${line.lineNumber}:`);
-            console.log(`  Word range: ${line.firstWordId}-${line.lastWordId}`);
-            console.log(`  Words found: ${lineWords.length}`);
-            console.log(`  Text: "${lineText}"`);
-            // Log individual words for this line
-            for (let wordId = line.firstWordId; wordId <= line.lastWordId; wordId++) {
-              console.log(`    Word ${wordId}: "${this.words.get(wordId) ?? 'MISSING'}"`);
-            }
-          }
         }
 
         pageText.push(lineText);

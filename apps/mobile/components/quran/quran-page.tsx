@@ -3,11 +3,11 @@ import { StyleSheet, View, Text, ScrollView } from 'react-native';
 import { useFonts } from 'expo-font';
 import { quranService } from '@/lib/quran';
 
-// Font asset
+// Font asset - DigitalKhatt is a variable font that supports letter width adjustment
 const DIGITAL_KHATT_FONT = require('@/assets/quran/DigitalKhattV2.otf');
 
 // Minimal horizontal padding to maximize text width
-const HORIZONTAL_PADDING = 6;
+const HORIZONTAL_PADDING = 4;
 
 interface QuranPageProps {
   pageIndex: number;
@@ -29,19 +29,21 @@ export function QuranPage({
     'DigitalKhatt': DIGITAL_KHATT_FONT,
   });
 
+  // Calculate content width for line sizing
+  const contentWidth = pageWidth - (HORIZONTAL_PADDING * 2);
+
   const pageData = useMemo(() => {
-    // Calculate font size based on page width
-    // The DigitalKhatt font needs proper sizing to fit all words on each line
-    // Start smaller to ensure all text fits, then let adjustsFontSizeToFit handle optimization
-    const baseFontSize = pageWidth / 15; // Smaller base to ensure text fits
+    // Calculate font size based on content width
+    // DigitalKhatt font is designed for Mushaf layouts
+    const baseFontSize = contentWidth / 15;
     const fontSize = customFontSize ?? Math.round(baseFontSize);
-    const lineHeight = Math.round(fontSize * 1.6);
+    const lineHeight = Math.round(fontSize * 1.65);
 
     return {
       fontSize,
       lineHeight,
     };
-  }, [pageWidth, customFontSize]);
+  }, [contentWidth, customFontSize]);
 
   const pageText = quranService.getPageText(pageIndex);
 
@@ -61,22 +63,6 @@ export function QuranPage({
     );
   }
 
-  // Get line info for special styling
-  const getLineStyle = (lineIndex: number) => {
-    const lineInfo = quranService.getLineInfo(pageIndex, lineIndex);
-    const baseStyle = {
-      fontSize: pageData.fontSize,
-      lineHeight: pageData.lineHeight,
-    };
-
-    // Surah names and basmallah are centered
-    if (lineInfo.lineType === 1 || lineInfo.lineType === 2) {
-      return { ...baseStyle, textAlign: 'center' as const };
-    }
-
-    return baseStyle;
-  };
-
   return (
     <ScrollView 
       style={[styles.scrollContainer, { width: pageWidth }]}
@@ -88,24 +74,35 @@ export function QuranPage({
     >
       <View style={[styles.contentContainer, { paddingHorizontal: HORIZONTAL_PADDING }]}>
         {pageText.map((line, lineIndex) => {
-          const lineStyle = getLineStyle(lineIndex);
           const lineInfo = quranService.getLineInfo(pageIndex, lineIndex);
           
-          // For regular ayah lines, use adjustsFontSizeToFit to fill the width
-          const isSpecialLine = lineInfo.lineType === 1 || lineInfo.lineType === 2;
+          // Use isCentered from the database (set for surah names, basmallah, and special pages)
+          const isCentered = lineInfo.isCentered;
+          const isSurahName = lineInfo.lineType === 1;
+          const isBasmallah = lineInfo.lineType === 2;
           
           return (
-            <View key={lineIndex} style={styles.lineContainer}>
+            <View 
+              key={lineIndex} 
+              style={[styles.lineContainer, { width: contentWidth }]}
+            >
               <Text
                 style={[
                   styles.arabicText,
-                  lineStyle,
-                  isSpecialLine && styles.centeredLine,
-                  lineInfo.lineType === 1 && styles.surahName,
-                  lineInfo.lineType === 2 && styles.basmallah,
+                  {
+                    fontSize: pageData.fontSize,
+                    lineHeight: pageData.lineHeight,
+                    width: contentWidth,
+                  },
+                  // Use is_centered from database for text alignment
+                  isCentered ? styles.centeredLine : styles.justifiedLine,
+                  isSurahName && styles.surahName,
+                  isBasmallah && styles.basmallah,
                 ]}
-                adjustsFontSizeToFit={!isSpecialLine}
-                minimumFontScale={0.5}
+                // For non-centered lines, use adjustsFontSizeToFit to help fit text
+                // This works with DigitalKhatt's variable width capabilities
+                adjustsFontSizeToFit={!isCentered}
+                minimumFontScale={0.7}
                 numberOfLines={1}
               >
                 {line}
@@ -125,7 +122,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    // Padding is now applied dynamically via props
   },
   pageContainer: {
     flex: 1,
@@ -135,9 +131,10 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   lineContainer: {
-    width: '100%',
+    alignItems: 'stretch',
   },
   loadingText: {
     fontSize: 16,
@@ -148,15 +145,18 @@ const styles = StyleSheet.create({
   arabicText: {
     fontFamily: 'DigitalKhatt',
     color: '#1a1a1a',
-    textAlign: 'right',
     writingDirection: 'rtl',
+  },
+  justifiedLine: {
+    // Right-aligned for RTL text (which is the start of the line)
+    // The text will fill the width through adjustsFontSizeToFit
+    textAlign: 'right',
   },
   centeredLine: {
     textAlign: 'center',
   },
   surahName: {
     color: '#1a5f4a', // Dark green for surah names
-    fontWeight: '600',
     marginVertical: 4,
   },
   basmallah: {
