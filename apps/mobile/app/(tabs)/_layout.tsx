@@ -14,6 +14,15 @@ export default function TabLayout() {
           }}
         />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reader">
+        <Label>Quran</Label>
+        <Icon
+          src={{
+            default: <VectorIcon family={Ionicons} name="book-outline" />,
+            selected: <VectorIcon family={Ionicons} name="book" />,
+          }}
+        />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="explore">
         <Label>Profile</Label>
         <Icon

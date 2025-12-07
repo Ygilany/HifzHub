@@ -40,7 +40,14 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": ["./assets/quran/DigitalKhattV2.otf"]
+        }
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
