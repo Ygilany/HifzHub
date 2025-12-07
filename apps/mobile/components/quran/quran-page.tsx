@@ -10,6 +10,7 @@ import { StyleSheet, View, Text, ActivityIndicator, ScrollView } from 'react-nat
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { quranService } from '@/lib/quran';
+import { NativeQuranLine } from './native-quran-line';
 
 // Font asset
 const DIGITAL_KHATT_FONT = require('@/assets/quran/DigitalKhattV2.otf');
@@ -94,29 +95,16 @@ function NativeQuranPage({
           const isBasmallah = lineInfo.lineType === 2;
           
           return (
-            <View 
-              key={lineIndex} 
-              style={[styles.lineContainer, { width: contentWidth }]}
-            >
-              <Text
-                style={[
-                  styles.arabicText,
-                  {
-                    fontSize: pageData.fontSize,
-                    lineHeight: pageData.lineHeight,
-                    width: contentWidth,
-                  },
-                  isCentered ? styles.centeredLine : styles.justifiedLine,
-                  isSurahName && styles.surahName,
-                  isBasmallah && styles.basmallah,
-                ]}
-                adjustsFontSizeToFit={!isCentered}
-                minimumFontScale={0.7}
-                numberOfLines={1}
-              >
-                {line}
-              </Text>
-            </View>
+            <NativeQuranLine
+              key={lineIndex}
+              lineText={line}
+              fontSize={pageData.fontSize}
+              lineHeight={pageData.lineHeight}
+              contentWidth={contentWidth}
+              isCentered={isCentered}
+              isSurahName={isSurahName}
+              isBasmallah={isBasmallah}
+            />
           );
         })}
       </View>
@@ -341,33 +329,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  lineContainer: {
-    alignItems: 'stretch',
-  },
   loadingText: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
     marginTop: 16,
-  },
-  arabicText: {
-    fontFamily: 'DigitalKhatt',
-    color: '#1a1a1a',
-    writingDirection: 'rtl',
-  },
-  justifiedLine: {
-    textAlign: 'right',
-  },
-  centeredLine: {
-    textAlign: 'center',
-  },
-  surahName: {
-    color: '#1a5f4a',
-    marginVertical: 4,
-  },
-  basmallah: {
-    color: '#1a1a1a',
-    marginVertical: 4,
   },
 });
 
