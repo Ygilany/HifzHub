@@ -8,6 +8,20 @@
       "when": 1764212056937,
       "tag": "0000_user",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765658014930,
+      "tag": "0001_polite_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766000000000,
+      "tag": "0002_programs_and_classes",
+      "breakpoints": true
     }
   ]
 }
