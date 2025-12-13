@@ -2,9 +2,13 @@
  * Root tRPC router that combines all sub-routers
  */
 
-import { router } from './trpc';
-import { testRouter } from './routers/test';
 import { authRouter } from './routers/auth';
+import { parentsRouter } from './routers/parents';
+import { teachersRouter } from './routers/teachers';
+import { programsRouter } from './routers/programs';
+import { classesRouter } from './routers/classes';
+import { testRouter } from './routers/test';
+import { router } from './trpc';
 
 /**
  * This is the primary router for your server.
@@ -13,6 +17,10 @@ import { authRouter } from './routers/auth';
 export const appRouter = router({
   test: testRouter,
   auth: authRouter,
+  teachers: teachersRouter,
+  parents: parentsRouter,
+  programs: programsRouter,
+  classes: classesRouter,
 });
 
 // Export type definition of API
