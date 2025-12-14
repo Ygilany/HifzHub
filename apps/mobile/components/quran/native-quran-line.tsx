@@ -6,12 +6,11 @@
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { WordPickerModal } from './word-picker-modal';
+import { QuranWord } from './quran-word';
 import { WordTooltip } from './word-tooltip';
 
 interface NativeQuranLineProps {
@@ -45,35 +44,25 @@ export function NativeQuranLine({
     position: { x: 0, y: 0, width: 0 },
     wordIndex: -1,
   });
-  const [showWordPicker, setShowWordPicker] = useState(false);
   const lineRef = useRef<View>(null);
 
   // Split line into words for selection
   const words = useMemo(() => lineText.split(' ').filter(w => w.length > 0), [lineText]);
 
-  const handleLongPress = useCallback(() => {
+  const handleWordLongPress = useCallback((wordIndex: number, position: { x: number; y: number; width: number }) => {
     // Trigger haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    // Show word picker modal
-    setShowWordPicker(true);
-  }, []);
-
-  const handleWordSelected = useCallback((wordIndex: number) => {
-    setShowWordPicker(false);
-    
-    // Show tooltip for the selected word
-    // Position it in the center of the line
-    lineRef.current?.measureInWindow((x, y, width) => {
-      setTooltip({
-        visible: true,
-        position: { 
-          x: x + width / 2 - 30, // Center approximately
-          y: y,
-          width: 60,
-        },
-        wordIndex,
-      });
+    // Show tooltip with arrow pointing to the word's center
+    // The tooltip expects position.x to be the left edge, and calculates center as x + width/2
+    setTooltip({
+      visible: true,
+      position: {
+        x: position.x, // Word left edge X position
+        y: position.y, // Word Y position
+        width: position.width, // Word width for accurate arrow positioning
+      },
+      wordIndex,
     });
   }, []);
 
@@ -94,18 +83,12 @@ export function NativeQuranLine({
   // For special lines (surah name, basmallah), use simple centered Text
   const isSpecialLine = isSurahName || isBasmallah;
 
-  return (
-    <View 
-      ref={lineRef}
-      style={[styles.lineContainer, { width: contentWidth }]}
-    >
-      <Pressable
-        onLongPress={handleLongPress}
-        delayLongPress={400}
-        style={({ pressed }) => [
-          styles.linePressable,
-          pressed && styles.linePressed,
-        ]}
+  // For special lines, use the original single Text approach
+  if (isSpecialLine) {
+    return (
+      <View 
+        ref={lineRef}
+        style={[styles.lineContainer, { width: contentWidth }]}
       >
         <Text
           style={[
@@ -115,7 +98,7 @@ export function NativeQuranLine({
               lineHeight,
               width: contentWidth,
             },
-            isCentered || isSpecialLine ? styles.centeredLine : styles.rightAlignedLine,
+            styles.centeredLine,
             isSurahName && styles.surahName,
             isBasmallah && styles.basmallah,
           ]}
@@ -125,14 +108,32 @@ export function NativeQuranLine({
         >
           {lineText}
         </Text>
-      </Pressable>
-      
-      <WordPickerModal
-        visible={showWordPicker}
-        words={words}
-        onSelectWord={handleWordSelected}
-        onClose={() => setShowWordPicker(false)}
-      />
+      </View>
+    );
+  }
+
+  // For regular lines, render words individually for accurate positioning
+  return (
+    <View 
+      ref={lineRef}
+      style={[
+        styles.lineContainer, 
+        { width: contentWidth },
+        isCentered ? styles.centeredContainer : styles.rightAlignedContainer,
+      ]}
+    >
+      <View style={styles.wordsContainer}>
+        {words.map((word, index) => (
+          <QuranWord
+            key={index}
+            word={word}
+            fontSize={fontSize}
+            lineHeight={lineHeight}
+            isLastWord={index === words.length - 1}
+            onLongPress={(position) => handleWordLongPress(index, position)}
+          />
+        ))}
+      </View>
       
       <WordTooltip
         visible={tooltip.visible}
@@ -149,20 +150,21 @@ const styles = StyleSheet.create({
   lineContainer: {
     alignItems: 'stretch',
   },
-  linePressable: {
-    // Full width touchable area
+  wordsContainer: {
+    flexDirection: 'row-reverse', // RTL layout
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
-  linePressed: {
-    backgroundColor: 'rgba(26, 95, 74, 0.05)',
-    borderRadius: 4,
+  rightAlignedContainer: {
+    alignItems: 'flex-end',
+  },
+  centeredContainer: {
+    alignItems: 'center',
   },
   arabicText: {
     fontFamily: 'DigitalKhatt',
     color: '#1a1a1a',
     writingDirection: 'rtl',
-  },
-  rightAlignedLine: {
-    textAlign: 'right',
   },
   centeredLine: {
     textAlign: 'center',
