@@ -113,9 +113,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    overflow: 'hidden',
   },
   avatarEmoji: {
-    fontSize: 48,
+    fontSize: 44,
+    lineHeight: 52,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   studentName: {
     fontSize: 24,

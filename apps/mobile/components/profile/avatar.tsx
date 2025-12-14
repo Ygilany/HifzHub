@@ -13,7 +13,7 @@ export function Avatar({ name, size = 80 }: AvatarProps) {
 
   return (
     <View style={[styles.avatarContainer, { backgroundColor: tintColor, width: size, height: size, borderRadius: size / 2 }]}>
-      <ThemedText style={[styles.avatarText, { fontSize: size * 0.4 }]}>{initial}</ThemedText>
+      <ThemedText style={[styles.avatarText, { fontSize: size * 0.4, lineHeight: size * 0.48 }]}>{initial}</ThemedText>
     </View>
   );
 }
@@ -22,10 +22,13 @@ const styles = StyleSheet.create({
   avatarContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   avatarText: {
     fontWeight: 'bold',
     color: '#ffffff',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });
 
