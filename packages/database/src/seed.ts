@@ -1,15 +1,15 @@
 import { config } from "dotenv";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { dirname, resolve } from "path";
-import pg from "pg";
 import { fileURLToPath } from "url";
-import { users } from "./schema";
-import { hashPassword } from "./utils/password";
+import { db, pool } from "./client";
+import { seedClasses } from "./seeds/classes";
+import { seedPrograms } from "./seeds/programs";
+import { seedRelationships } from "./seeds/relationships";
+import { seedUsers } from "./seeds/users";
 
-const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load environment variables from database package .env file
+// Load environment variables from monorepo root
 config({ path: resolve(__dirname, "../../../.env") });
 
 const seedDatabase = async () => {
@@ -17,68 +17,49 @@ const seedDatabase = async () => {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  console.log("🌱 Seeding database...");
-
-  // Create database connection pool
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
-  const db = drizzle(pool);
+  console.log("🌱 Seeding database...\n");
 
   try {
-    // Hash the password
-    const password = "password123"; // Default password for seed users
-    const passwordHash = await hashPassword(password);
+    // 1. Seed users
+    const users = await seedUsers(db);
+    const teacher = users.find((u) => u.role === "TEACHER");
+    const student = users.find((u) => u.role === "STUDENT");
 
-    // Test users to create
-    const testUsers = [
-      {
-        email: "admin@hifzhub.com",
-        name: "Admin User",
-        role: "ADMIN" as const,
-      },
-      {
-        email: "teacher@hifzhub.com",
-        name: "Test Teacher",
-        role: "TEACHER" as const,
-      },
-      {
-        email: "student@hifzhub.com",
-        name: "Test Student",
-        role: "STUDENT" as const,
-      },
-    ];
-
-    console.log("Creating test users...\n");
-
-    for (const userData of testUsers) {
-      try {
-        const [newUser] = await db
-          .insert(users)
-          .values({
-            ...userData,
-            passwordHash,
-          })
-          .onConflictDoUpdate({
-            target: users.email,
-            set: { name: userData.name },
-          })
-          .returning();
-
-        console.log(`✅ Created: ${newUser.email} (${newUser.role})`);
-      } catch (err: any) {
-        if (err.code === '23505') {
-          console.log(`⏭️  Already exists: ${userData.email}`);
-        } else {
-          throw err;
-        }
-      }
+    if (!teacher) {
+      throw new Error("Teacher user not found after seeding");
+    }
+    if (!student) {
+      throw new Error("Student user not found after seeding");
     }
 
-    console.log("\n🎉 Database seeding completed!");
+    // 2. Seed programs
+    const seededPrograms = await seedPrograms(db);
+    const icgcProgram = seededPrograms.find((p) => p.name === "ICGC");
+
+    if (!icgcProgram) {
+      throw new Error("ICGC program not found after seeding");
+    }
+
+    // 3. Seed class in first program (ICGC)
+    const classData = await seedClasses(db, icgcProgram.id, "Beginner Class");
+
+    // 4. Seed relationships
+    await seedRelationships(db, {
+      teacherId: teacher.id,
+      studentId: student.id,
+      programId: icgcProgram.id,
+      classId: classData.id,
+    });
+
+    console.log("🎉 Database seeding completed!");
     console.log("\nTest credentials (all users):");
     console.log(`   Email: <user>@hifzhub.com`);
-    console.log(`   Password: ${password}`);
+    console.log(`   Password: password123`);
+    console.log("\n📊 Seeded data:");
+    console.log(`   Programs: ${seededPrograms.map((p) => p.name).join(", ")}`);
+    console.log(`   Teacher (${teacher.email}) → Program: ${icgcProgram.name}`);
+    console.log(`   Student (${student.email}) → Program: ${icgcProgram.name}`);
+    console.log(`   Student (${student.email}) → Class: ${classData.name}`);
   } catch (error) {
     console.error("❌ Error seeding database:", error);
     await pool.end();
