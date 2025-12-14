@@ -3,9 +3,9 @@
  * Handles teacher-specific operations
  */
 
-import { programTeachers, programStudents, users } from '@hifzhub/database/schema';
+import { programStudents, programTeachers } from '@hifzhub/database/schema';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { protectedProcedure, router } from '../trpc';
 
 export const teachersRouter = router({
@@ -86,7 +86,24 @@ export const teachersRouter = router({
     const relationships = await ctx.db.query.programTeachers.findMany({
       where: eq(programTeachers.teacherId, userId),
       with: {
-        program: true,
+        program: {
+          with: {
+            classes: {
+              with: {
+                students: {
+                  with: {
+                    student: {
+                      columns: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
