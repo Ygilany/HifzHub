@@ -14,8 +14,13 @@ export function StudentCard({ name, avatar, onPress }: StudentCardProps) {
 
   return (
     <Pressable
-      style={[styles.studentCard, { backgroundColor: cardBackground }]}
+      style={({ pressed }) => [
+        styles.studentCard, 
+        { backgroundColor: cardBackground },
+        pressed && styles.pressed
+      ]}
       onPress={onPress}
+      disabled={!onPress}
     >
       <View style={styles.studentAvatar}>
         <ThemedText style={styles.avatarEmoji}>{avatar}</ThemedText>
@@ -37,6 +42,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   studentAvatar: {
     width: 48,
