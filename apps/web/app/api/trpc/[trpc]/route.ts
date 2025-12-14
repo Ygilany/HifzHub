@@ -3,19 +3,22 @@
  * This handles all tRPC requests at /api/trpc/*
  */
 
+import { appRouter, createContext, extractUserFromToken } from '@hifzhub/api';
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
-import { appRouter, createContext } from '@hifzhub/api';
 
-const handler = (req: Request) =>
-  fetchRequestHandler({
+const handler = async (req: Request) => {
+  // Extract authorization header and get user
+  const authHeader = req.headers.get('authorization');
+  const user = await extractUserFromToken(authHeader);
+
+  return fetchRequestHandler({
     endpoint: '/api/trpc',
     req,
     router: appRouter,
     createContext: () =>
       createContext({
-        // In a real app, you would extract user from session/cookies
-        // For now, we'll pass null (unauthenticated)
-        user: null,
+        headers: req.headers,
+        user,
       }),
     onError:
       process.env.NODE_ENV === 'development'
@@ -26,5 +29,6 @@ const handler = (req: Request) =>
           }
         : undefined,
   });
+};
 
 export { handler as GET, handler as POST };
