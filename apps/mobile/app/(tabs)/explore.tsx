@@ -4,6 +4,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuth } from '@/lib/auth/context';
+import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -73,8 +74,8 @@ export default function ProfileScreen() {
             App
           </ThemedText>
 
-          <MenuItem icon="questionmark.circle.fill" label="Help & Support" />
-          <MenuItem icon="info.circle.fill" label="About" />
+          <MenuItem icon="questionmark.circle.fill" label="Help & Support" onPress={() => router.push('/help')} />
+          <MenuItem icon="info.circle.fill" label="About" onPress={() => router.push('/about')} />
         </ThemedView>
 
         {/* Logout Button */}
