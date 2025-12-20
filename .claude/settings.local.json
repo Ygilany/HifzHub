@@ -12,7 +12,13 @@
       "Bash(ls:*)",
       "Bash(mkdir:*)",
       "Bash(pnpm --filter=mobile typecheck:*)",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs basename:*)",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []
