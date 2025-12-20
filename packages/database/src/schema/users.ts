@@ -17,6 +17,10 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").notNull(),
   passwordHash: varchar("password_hash", { length: 255 }),
 
+  // Contact information
+  phone: varchar("phone", { length: 20 }),
+  alternatePhone: varchar("alternate_phone", { length: 20 }),
+
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
