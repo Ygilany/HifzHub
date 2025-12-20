@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.hifzhub"
+      "bundleIdentifier": "io.yahyagilany.hifzhub"
     },
     "android": {
       "adaptiveIcon": {
