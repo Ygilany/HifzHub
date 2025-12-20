@@ -4,6 +4,10 @@
  * Based on the mushaf-react-native reference implementation.
  * Uses Skia for proper justification in development builds,
  * falls back to native Text rendering in Expo Go.
+ * 
+ * Supports two interaction modes:
+ * - 'tooltip': Shows a tooltip with Hifz/Tajweed options on tap
+ * - 'marking': Cycles through marking states on tap (tajweed → tasheel → hifz → corrected → clear)
  */
 
 import { quranService } from '@/lib/quran';
@@ -30,12 +34,32 @@ const SPACEWIDTH = 100;
 // Horizontal padding for native rendering
 const HORIZONTAL_PADDING = 4;
 
+// Word interaction modes
+export type WordInteractionMode = 'tooltip' | 'marking';
+
+// Word marking types (cycle order: none → tajweed → tasheel → hifz → corrected → none)
+export type WordMarkingType = 'tajweed' | 'tasheel' | 'hifz' | 'corrected';
+
+// Marking configuration
+export const MARKING_CONFIG: Record<WordMarkingType, { color: string; label: string }> = {
+  tajweed: { color: 'rgba(255, 235, 59, 0.4)', label: 'Tajweed' },    // Yellow
+  tasheel: { color: 'rgba(255, 152, 0, 0.4)', label: 'Tasheel' },     // Orange
+  hifz: { color: 'rgba(244, 67, 54, 0.4)', label: 'Hifz' },           // Red
+  corrected: { color: 'rgba(76, 175, 80, 0.4)', label: 'Corrected' }, // Green
+};
+
+// Order of marking cycle
+const MARKING_CYCLE: (WordMarkingType | null)[] = [null, 'tajweed', 'tasheel', 'hifz', 'corrected'];
+
 interface QuranPageProps {
   pageIndex: number;
   pageWidth: number;
   pageHeight: number;
   topPadding?: number;
   bottomPadding?: number;
+  interactionMode?: WordInteractionMode;
+  wordMarkings?: Map<string, WordMarkingType>;
+  onWordMarkingChange?: (wordKey: string, marking: WordMarkingType | null) => void;
 }
 
 interface TooltipState {
@@ -54,6 +78,11 @@ interface WordRect {
   wordIndex: number;
   lineIndex: number;
   wordText: string;
+}
+
+// Helper to generate word key
+function getWordKey(pageIndex: number, lineIndex: number, wordIndex: number): string {
+  return `${pageIndex}-${lineIndex}-${wordIndex}`;
 }
 
 /**
@@ -147,7 +176,7 @@ let SkiaQuranPage: React.ComponentType<QuranPageProps> | null = null;
 
 if (!isExpoGo) {
   // Dynamically import Skia components only when not in Expo Go
-  const { Canvas, useFonts: useSkiaFonts, Skia, TextDirection, TextHeightBehavior, Paragraph } = require('@shopify/react-native-skia');
+  const { Canvas, useFonts: useSkiaFonts, Skia, TextDirection, TextHeightBehavior, Paragraph, RoundedRect, Group } = require('@shopify/react-native-skia');
   const { JustService, SpaceType, analyzeText } = require('@/lib/quran/just-service');
 
   // Paragraph style for RTL text (no TextAlign - let RTL handle it)
@@ -162,12 +191,15 @@ if (!isExpoGo) {
     pageHeight,
     topPadding = 0,
     bottomPadding = 0,
+    interactionMode = 'marking', // Default to marking mode
+    wordMarkings: externalWordMarkings,
+    onWordMarkingChange,
   }: QuranPageProps) {
     const fontMgr = useSkiaFonts({
       DigitalKhatt: [DIGITAL_KHATT_FONT],
     });
 
-    // Tooltip state
+    // Tooltip state (for tooltip mode)
     const [tooltip, setTooltip] = useState<TooltipState>({
       visible: false,
       position: { x: 0, y: 0, width: 0 },
@@ -175,6 +207,27 @@ if (!isExpoGo) {
       lineIndex: 0,
       wordText: '',
     });
+
+    // Internal word markings state (used if no external state provided)
+    const [internalWordMarkings, setInternalWordMarkings] = useState<Map<string, WordMarkingType>>(new Map());
+    
+    // Use external markings if provided, otherwise use internal state
+    const wordMarkings = externalWordMarkings ?? internalWordMarkings;
+    const setWordMarking = useCallback((wordKey: string, marking: WordMarkingType | null) => {
+      if (onWordMarkingChange) {
+        onWordMarkingChange(wordKey, marking);
+      } else {
+        setInternalWordMarkings(prev => {
+          const newMap = new Map(prev);
+          if (marking === null) {
+            newMap.delete(wordKey);
+          } else {
+            newMap.set(wordKey, marking);
+          }
+          return newMap;
+        });
+      }
+    }, [onWordMarkingChange]);
 
     // Calculate layout based on reference coordinate system
     const layout = useMemo(() => {
@@ -281,16 +334,10 @@ if (!isExpoGo) {
         const paragraphBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
         paragraphBuilder.pushStyle(textStyle);
 
-        // Track character positions for word rect calculation
-        let charIndex = 0;
-        const wordPositions: { startChar: number; endChar: number; wordIndex: number; text: string }[] = [];
-
         // Build text with font features and spacing
         for (let wordIndex = 0; wordIndex < lineTextInfo.wordInfos.length; wordIndex++) {
           const wordInfo = lineTextInfo.wordInfos[wordIndex];
           if (!wordInfo) continue;
-
-          const wordStartChar = charIndex;
 
           // Add each character with its font features
           for (let i = wordInfo.startIndex; i <= wordInfo.endIndex; i++) {
@@ -305,16 +352,7 @@ if (!isExpoGo) {
             } else {
               paragraphBuilder.addText(char);
             }
-            charIndex++;
           }
-
-          const wordEndChar = charIndex;
-          wordPositions.push({
-            startChar: wordStartChar,
-            endChar: wordEndChar,
-            wordIndex,
-            text: wordInfo.text,
-          });
 
           // Add space with appropriate spacing
           const spaceType = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
@@ -328,7 +366,6 @@ if (!isExpoGo) {
             paragraphBuilder.pushStyle(spaceStyle);
             paragraphBuilder.addText(' ');
             paragraphBuilder.pop();
-            charIndex++;
           }
         }
 
@@ -354,7 +391,6 @@ if (!isExpoGo) {
         const lineHeight = layout.interline;
         
         // Calculate where the text starts on screen (right edge for RTL)
-        // xPos positions the paragraph, currLineWidth is the actual text width
         const lineRightEdge = pageWidth - effectiveMargin;
         
         // Measure each word and calculate positions
@@ -394,14 +430,6 @@ if (!isExpoGo) {
             : 0;
           currentX = wordX - spaceWidth;
         }
-        
-        // Debug log for first line
-        if (lineIndex === 0 && allWordRects.length > 0) {
-          const firstRect = allWordRects[allWordRects.length - lineTextInfo.wordInfos.length];
-          if (firstRect) {
-            console.log(`Line 0: ${lineTextInfo.wordInfos.length} words, first word at x=${firstRect.x.toFixed(0)}, y=${firstRect.y.toFixed(0)}`);
-          }
-        }
 
         return {
           paragraph,
@@ -418,8 +446,6 @@ if (!isExpoGo) {
     const handlePress = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
       const { locationX, locationY } = event.nativeEvent;
       
-      console.log(`Tap at (${locationX.toFixed(0)}, ${locationY.toFixed(0)}), checking ${wordRects.length} word rects`);
-      
       // Find the word at this position
       for (const rect of wordRects) {
         if (
@@ -428,42 +454,41 @@ if (!isExpoGo) {
           locationY >= rect.y &&
           locationY <= rect.y + rect.height
         ) {
-          console.log(`Found word: "${rect.wordText}" at (${rect.x.toFixed(0)}, ${rect.y.toFixed(0)}) size ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
-          // Adjust y position to be closer to visible text (add offset for better tooltip positioning)
-          // The actual text is rendered lower in the line due to font metrics
-          const adjustedY = rect.y + rect.height * 0.7; // Position tooltip closer to text
-          setTooltip({
-            visible: true,
-            position: {
-              x: rect.x,
-              y: adjustedY,
-              width: rect.width,
-            },
-            wordIndex: rect.wordIndex,
-            lineIndex: rect.lineIndex,
-            wordText: rect.wordText,
-          });
+          const wordKey = getWordKey(pageIndex, rect.lineIndex, rect.wordIndex);
+          
+          if (interactionMode === 'marking') {
+            // Marking mode: cycle through marking states
+            const currentMarking = wordMarkings.get(wordKey) ?? null;
+            const currentIndex = MARKING_CYCLE.indexOf(currentMarking);
+            const nextIndex = (currentIndex + 1) % MARKING_CYCLE.length;
+            const nextMarking = MARKING_CYCLE[nextIndex] ?? null;
+            
+            console.log(`Word "${rect.wordText}": ${currentMarking ?? 'none'} → ${nextMarking ?? 'none'}`);
+            setWordMarking(wordKey, nextMarking);
+          } else {
+            // Tooltip mode: show tooltip
+            const adjustedY = rect.y + rect.height * 0.7;
+            setTooltip({
+              visible: true,
+              position: {
+                x: rect.x,
+                y: adjustedY,
+                width: rect.width,
+              },
+              wordIndex: rect.wordIndex,
+              lineIndex: rect.lineIndex,
+              wordText: rect.wordText,
+            });
+          }
           return;
         }
-      }
-      
-      // Log first few word rects for debugging
-      const firstRect = wordRects[0];
-      if (firstRect) {
-        console.log('First word rect:', JSON.stringify({
-          x: firstRect.x.toFixed(0),
-          y: firstRect.y.toFixed(0),
-          w: firstRect.width.toFixed(0),
-          h: firstRect.height.toFixed(0),
-          text: firstRect.wordText,
-        }));
       }
       
       // No word found at tap position, close tooltip if open
       if (tooltip.visible) {
         setTooltip(prev => ({ ...prev, visible: false }));
       }
-    }, [wordRects, tooltip.visible]);
+    }, [wordRects, tooltip.visible, interactionMode, wordMarkings, pageIndex, setWordMarking]);
 
     const handleCloseTooltip = useCallback(() => {
       setTooltip(prev => ({ ...prev, visible: false }));
@@ -471,13 +496,24 @@ if (!isExpoGo) {
 
     const handleHifz = useCallback(() => {
       console.log('Hifz pressed for word:', tooltip.wordText, 'at line:', tooltip.lineIndex);
-      // TODO: Implement Hifz functionality
     }, [tooltip.wordText, tooltip.lineIndex]);
 
     const handleTajweed = useCallback(() => {
       console.log('Tajweed pressed for word:', tooltip.wordText, 'at line:', tooltip.lineIndex);
-      // TODO: Implement Tajweed functionality
     }, [tooltip.wordText, tooltip.lineIndex]);
+
+    // Get marked word rects for rendering
+    const markedWordRects = useMemo(() => {
+      const marked: { rect: WordRect; marking: WordMarkingType }[] = [];
+      for (const rect of wordRects) {
+        const wordKey = getWordKey(pageIndex, rect.lineIndex, rect.wordIndex);
+        const marking = wordMarkings.get(wordKey);
+        if (marking) {
+          marked.push({ rect, marking });
+        }
+      }
+      return marked;
+    }, [wordRects, wordMarkings, pageIndex]);
 
     if (!fontMgr) {
       return (
@@ -500,6 +536,41 @@ if (!isExpoGo) {
       <View style={[styles.container, { width: pageWidth, height: pageHeight }]}>
         <Pressable style={styles.canvas} onPress={handlePress}>
           <Canvas style={styles.canvas}>
+            {/* Render word markings (behind text) */}
+            {markedWordRects.map(({ rect, marking }) => {
+              const config = MARKING_CONFIG[marking];
+              
+              // Offset adjustments to align highlight with actual rendered text
+              // Tune these values based on visual testing
+              const xOffset = 0; // Positive = move right, Negative = move left
+              const yOffset = rect.height * 0.4; // Move down to align with text baseline area
+              
+              // Highlight dimensions
+              const paddingH = 4;
+              const paddingV = 4;
+              const highlightHeight = layout.fontSize * 1.2; // Base on font size, not line height
+              
+              const highlightX = rect.x + xOffset - paddingH;
+              const highlightY = rect.y + yOffset - paddingV;
+              const highlightWidth = rect.width + paddingH * 2;
+              const totalHeight = highlightHeight + paddingV * 2;
+              
+              return (
+                <Group key={`marking-${rect.lineIndex}-${rect.wordIndex}`}>
+                  {/* Oval highlight behind word */}
+                  <RoundedRect
+                    x={highlightX}
+                    y={highlightY}
+                    width={highlightWidth}
+                    height={totalHeight}
+                    r={totalHeight / 2}
+                    color={config.color}
+                  />
+                </Group>
+              );
+            })}
+            
+            {/* Render paragraphs (text) */}
             {paragraphs.map((item, lineIndex) => (
               <Paragraph
                 key={`${pageIndex}-${lineIndex}`}
@@ -512,13 +583,15 @@ if (!isExpoGo) {
           </Canvas>
         </Pressable>
         
-        <WordTooltip
-          visible={tooltip.visible}
-          position={tooltip.position}
-          onClose={handleCloseTooltip}
-          onHifz={handleHifz}
-          onTajweed={handleTajweed}
-        />
+        {interactionMode === 'tooltip' && (
+          <WordTooltip
+            visible={tooltip.visible}
+            position={tooltip.position}
+            onClose={handleCloseTooltip}
+            onHifz={handleHifz}
+            onTajweed={handleTajweed}
+          />
+        )}
       </View>
     );
   };
