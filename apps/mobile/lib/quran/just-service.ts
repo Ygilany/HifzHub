@@ -15,7 +15,7 @@ import {
   TextHeightBehavior,
 } from '@shopify/react-native-skia';
 
-// Constants for layout calculations
+// Constants for layout calculations (matching reference implementation)
 export const SPACEWIDTH = 100;
 export const FONTSIZE = 1000;
 
@@ -72,7 +72,7 @@ interface LookupContext {
 
 interface ApplyContext {
   prevFeatures: SkTextFontFeatures[] | undefined;
-  char: string;
+  char: string | undefined;
   wordIndex: number;
   charIndex: number;
 }
@@ -172,7 +172,7 @@ export class JustService {
   private lineText: string;
   private textStyle: SkTextStyle;
   private parInfiniteWidth: number;
-  private lineWidth = 2000;
+  private lineWidth = 2000; // Arbitrary reference number
   private desiredWidth: number;
   private fontSize: number;
   private paraBuilder: SkParagraphBuilder;
@@ -210,15 +210,11 @@ export class JustService {
 
     let layOutResult: LayoutResult[] = [];
     let justResults: JustInfo | undefined;
-    let simpleSpaceWidth: number;
-    let ayaSpaceWidth: number;
-
-    const totalSpaces = lineTextInfo.ayaSpaceIndexes.length + lineTextInfo.simpleSpaceIndexes.length;
-    let textWidthByWord = defaultSpaceWidth * totalSpaces;
 
     // Measure each word
     for (let wordIndex = 0; wordIndex < lineTextInfo.wordInfos.length; wordIndex++) {
       const wordInfo = lineTextInfo.wordInfos[wordIndex];
+      if (!wordInfo) continue;
 
       let paragraphBuilder = this.paraBuilder;
       paragraphBuilder.reset();
@@ -229,7 +225,6 @@ export class JustService {
       const parHeight = paragraph.getHeight();
       const parWidth = paragraph.getLongestLine();
 
-      textWidthByWord += parWidth;
       layOutResult.push({ parHeight, parWidth });
       paragraph.dispose();
     }
@@ -253,43 +248,47 @@ export class JustService {
     let fontSizeRatio = 1;
     let simpleSpacing = SPACEWIDTH;
     let ayaSpacing = SPACEWIDTH;
+    let simpleSpaceWidth = defaultSpaceWidth;
+    let ayaSpaceWidth = defaultSpaceWidth;
 
     if (diff > 0) {
-      // Need to stretch
-      let maxStretchBySpace = defaultSpaceWidth * 0.5;
-      let maxStretchByAyaSpace = defaultSpaceWidth * 2;
-
-      let maxStretch =
-        maxStretchBySpace * lineTextInfo.simpleSpaceIndexes.length +
-        maxStretchByAyaSpace * lineTextInfo.ayaSpaceIndexes.length;
-
-      let stretch = Math.min(desiredWidth - currentLineWidth, maxStretch);
-      let spaceRatio = maxStretch !== 0 ? stretch / maxStretch : 0;
-      let stretchBySpace = spaceRatio * maxStretchBySpace;
-      let stretchByByAyaSpace = spaceRatio * maxStretchByAyaSpace;
-
+      // Line is too short - need to stretch
+      
+      // Step 1: First try stretching by increasing space widths
+      const maxStretchBySpace = defaultSpaceWidth * 0.5;
+      const maxStretchByAyaSpace = defaultSpaceWidth * 2;
+      
+      const maxStretch = maxStretchBySpace * lineTextInfo.simpleSpaceIndexes.length + 
+                         maxStretchByAyaSpace * lineTextInfo.ayaSpaceIndexes.length;
+      
+      const stretch = Math.min(desiredWidth - currentLineWidth, maxStretch);
+      const spaceRatio = maxStretch !== 0 ? stretch / maxStretch : 0;
+      const stretchBySpace = spaceRatio * maxStretchBySpace;
+      const stretchByAyaSpace = spaceRatio * maxStretchByAyaSpace;
+      
       simpleSpaceWidth = defaultSpaceWidth + stretchBySpace;
-      ayaSpaceWidth = defaultSpaceWidth + stretchByByAyaSpace;
-
+      ayaSpaceWidth = defaultSpaceWidth + stretchByAyaSpace;
+      
       currentLineWidth += stretch;
 
-      // Apply font feature stretching
+      // Step 2: Apply kashida stretching if still needed
       if (desiredWidth > currentLineWidth) {
         justResults = this.stretchLine(layOutResult, currentLineWidth, desiredWidth);
         currentLineWidth = justResults.textLineWidth;
       }
 
-      // Full justify with space if still needed
+      // Step 3: Full justify with remaining space
       if (desiredWidth > currentLineWidth && lineTextInfo.spaces.size > 0) {
-        let addToSpace = (desiredWidth - currentLineWidth) / lineTextInfo.spaces.size;
+        const addToSpace = (desiredWidth - currentLineWidth) / lineTextInfo.spaces.size;
         simpleSpaceWidth += addToSpace;
         ayaSpaceWidth += addToSpace;
       }
 
       simpleSpacing = simpleSpaceWidth / scale;
       ayaSpacing = ayaSpaceWidth / scale;
-    } else {
-      // Need to shrink - reduce font size
+
+    } else if (diff < 0) {
+      // Line is too long - shrink by changing font size ratio
       fontSizeRatio = desiredWidth / currentLineWidth;
     }
 
@@ -330,7 +329,7 @@ export class JustService {
                   calcNewValue: (prev, curr) => Math.min((prev || 0) + curr, 6),
                 },
               ];
-              if ('بتثنيئ'.includes(context.char)) {
+              if (context.char && 'بتثنيئ'.includes(context.char)) {
                 newFeatures.push({ feature: { name: 'cv10', value: 1 } });
               }
               return this.mergeFeatures(context.prevFeatures, newFeatures);
@@ -362,7 +361,7 @@ export class JustService {
                   calcNewValue: (prev, curr) => Math.min((prev || 0) + curr, 6),
                 },
               ];
-              if ('بتثنيئ'.includes(context.char)) {
+              if (context.char && 'بتثنيئ'.includes(context.char)) {
                 newFeatures.push({ feature: { name: 'cv10', value: 1 } });
               }
               return this.mergeFeatures(context.prevFeatures, newFeatures);
@@ -387,9 +386,10 @@ export class JustService {
         let group = context?.groups?.['k5'];
         if (group) {
           const wordInfo = wordInfos[context.wordIndex];
+          if (!wordInfo) return true;
           const charIndex = group[0];
-          const char = wordInfo.text[charIndex];
-          if (finalIsolAlternates.includes(char) && isLastBase(wordInfo.text, charIndex)) {
+          const char = wordInfo.text[charIndex] ?? '';
+          if (char && finalIsolAlternates.includes(char) && isLastBase(wordInfo.text, charIndex)) {
             return false;
           }
         }
@@ -405,7 +405,7 @@ export class JustService {
                   calcNewValue: (prev, curr) => Math.min((prev || 0) + curr, 6),
                 },
               ];
-              if ('بتثنيئ'.includes(context.char)) {
+              if (context.char && 'بتثنيئ'.includes(context.char)) {
                 newFeatures.push({ feature: { name: 'cv10', value: 1 } });
               }
               return this.mergeFeatures(context.prevFeatures, newFeatures);
@@ -499,11 +499,11 @@ export class JustService {
     };
 
     if (firstLevel) {
-      decompLookup.actions.k1.push({ name: 'cv01', calcNewValue: () => firstLevel });
+      decompLookup.actions.k1!.push({ name: 'cv01', calcNewValue: () => firstLevel });
     }
 
     if (secondLevel) {
-      decompLookup.actions.k2.push({ name: 'cv02', calcNewValue: () => secondLevel });
+      decompLookup.actions.k2!.push({ name: 'cv02', calcNewValue: () => secondLevel });
     }
 
     this.applyLookupInc(justInfo, decompLookup, 1);
@@ -527,13 +527,18 @@ export class JustService {
     let result = justInfo.fontFeatures;
 
     const wordInfo = wordInfos[wordIndex];
+    if (!wordInfo) return;
+    
     let layout = justInfo.layoutResult[wordIndex];
+    if (!layout) return;
 
     let regExprs = Array.isArray(lookup.regExprs) ? lookup.regExprs : [lookup.regExprs];
     let matched = false;
 
     for (let regIndex = 0; regIndex < regExprs.length && !matched; regIndex++) {
       const regExpr = regExprs[regIndex];
+      if (!regExpr) continue;
+      
       regExpr.lastIndex = 0;
 
       let match = regExpr.exec(wordInfo.text);
@@ -571,9 +576,10 @@ export class JustService {
               { feature: { name: action.name, value: newValue }, calcNewValue: action.calcNewValue },
             ]);
           } else {
+            const charAtIndex = group[0] !== undefined ? wordInfo.text[group[0]] : undefined;
             newFeatures = action.apply({
               prevFeatures,
-              char: wordInfo.text[group[0]],
+              char: charAtIndex,
               wordIndex,
               charIndex: group[0],
             });
@@ -639,6 +645,15 @@ export class JustService {
 
   private shapeWord(wordIndex: number, justResults: Map<number, SkTextFontFeatures[]>): SkParagraph {
     const wordInfo = this.lineTextInfo.wordInfos[wordIndex];
+    if (!wordInfo) {
+      // Return empty paragraph if no word info
+      let paragraphBuilder = this.paraBuilder;
+      paragraphBuilder.reset();
+      paragraphBuilder.pushStyle(this.textStyle);
+      let paragraph = paragraphBuilder.pop().build();
+      paragraph.layout(this.parInfiniteWidth);
+      return paragraph;
+    }
 
     let paragraphBuilder = this.paraBuilder;
     paragraphBuilder.reset();
@@ -672,6 +687,8 @@ export class JustService {
     const wordInfos = this.lineTextInfo.wordInfos;
     const wordInfo = wordInfos[context.wordIndex];
 
+    if (!wordInfo) return true;
+
     if (wordInfo.baseText.length === 2 && !'سش'.includes(wordInfo.baseText)) {
       return false;
     }
@@ -680,26 +697,21 @@ export class JustService {
     let k4 = context?.groups?.['k4'] || context?.groups?.['k5'];
 
     if (k3 && k4) {
-      const chark3 = wordInfo.text[k3[0]];
-      const chark4 = wordInfo.text[k4[0]];
+      const chark3 = wordInfo.text[k3[0]] ?? '';
+      const chark4 = wordInfo.text[k4[0]] ?? '';
       const indexk3InLine = k3[0] + wordInfo.startIndex;
       const prevk3Features = context.justInfo.fontFeatures.get(indexk3InLine);
 
       if (chark3 === 'ل' && (chark4 === 'ك' || chark4 === 'د' || chark4 === 'ذ')) {
         return false;
       } else if (
-        'عغجحخ'.includes(chark3) &&
+        chark3 && 'عغجحخ'.includes(chark3) &&
         !prevk3Features?.find((a) => a.name === 'cv16') &&
-        ('كلذداة'.includes(chark4) || (chark4 === 'ه' && isLastBase(wordInfo.text, k4[0])))
+        (chark4 && 'كلذداة'.includes(chark4) || (chark4 === 'ه' && isLastBase(wordInfo.text, k4[0])))
       ) {
         return false;
       }
     }
     return true;
   }
-
-  dispose() {
-    this.paraBuilder.dispose();
-  }
 }
-

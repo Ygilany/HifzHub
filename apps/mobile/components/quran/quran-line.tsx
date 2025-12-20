@@ -77,10 +77,7 @@ export function QuranLine({
       lineWidthRatio,
       lineText
     );
-    const result = justService.justifyLine();
-    justService.dispose();
-    
-    return result;
+    return justService.justifyLine();
   }, [lineText, lineType, lineTextInfo, fontMgr, fontSizeLineWidthRatio, lineWidthRatio]);
   
   // Build the paragraph
@@ -161,8 +158,6 @@ export function QuranLine({
     }
     
     const x = -(maxWidth - pageWidth + effectiveMargin);
-    
-    paragraphBuilder.dispose();
     
     return { paragraph: para, xPos: x };
   }, [
