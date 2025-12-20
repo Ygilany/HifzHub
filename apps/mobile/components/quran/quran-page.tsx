@@ -9,9 +9,10 @@
 import { quranService } from '@/lib/quran';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFonts } from 'expo-font';
-import React, { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeQuranLine } from './native-quran-line';
+import { WordTooltip } from './word-tooltip';
 
 // Font asset
 const DIGITAL_KHATT_FONT = require('@/assets/quran/DigitalKhattV2.otf');
@@ -35,6 +36,24 @@ interface QuranPageProps {
   pageHeight: number;
   topPadding?: number;
   bottomPadding?: number;
+}
+
+interface TooltipState {
+  visible: boolean;
+  position: { x: number; y: number; width: number };
+  wordIndex: number;
+  lineIndex: number;
+  wordText: string;
+}
+
+interface WordRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  wordIndex: number;
+  lineIndex: number;
+  wordText: string;
 }
 
 /**
@@ -148,6 +167,15 @@ if (!isExpoGo) {
       DigitalKhatt: [DIGITAL_KHATT_FONT],
     });
 
+    // Tooltip state
+    const [tooltip, setTooltip] = useState<TooltipState>({
+      visible: false,
+      position: { x: 0, y: 0, width: 0 },
+      wordIndex: 0,
+      lineIndex: 0,
+      wordText: '',
+    });
+
     // Calculate layout based on reference coordinate system
     const layout = useMemo(() => {
       const scale = pageWidth / PAGE_WIDTH_REF;
@@ -178,20 +206,21 @@ if (!isExpoGo) {
 
     const pageText = quranService.getPageText(pageIndex);
 
-    // Pre-compute all paragraphs
-    const paragraphs = useMemo(() => {
+    // Pre-compute all paragraphs and word rectangles
+    const { paragraphs, wordRects } = useMemo(() => {
       if (!fontMgr || !pageText || pageText.length === 0) {
-        return null;
+        return { paragraphs: null, wordRects: [] as WordRect[] };
       }
 
       const fontSize = layout.fontSize;
       const fontSizeLineWidthRatio = fontSize / layout.lineWidth;
       const maxWidth = pageWidth * 2;
+      const allWordRects: WordRect[] = [];
 
       // Starting y position - add topPadding to offset from the header
       let yPos = topPadding + (-layout.ascendant + (200 * layout.scale));
 
-      return pageText.map((lineText, lineIndex) => {
+      const paragraphData = pageText.map((lineText, lineIndex) => {
         const lineInfo = quranService.getLineInfo(pageIndex, lineIndex);
         
         // Special positioning for first two pages
@@ -252,10 +281,16 @@ if (!isExpoGo) {
         const paragraphBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
         paragraphBuilder.pushStyle(textStyle);
 
+        // Track character positions for word rect calculation
+        let charIndex = 0;
+        const wordPositions: { startChar: number; endChar: number; wordIndex: number; text: string }[] = [];
+
         // Build text with font features and spacing
         for (let wordIndex = 0; wordIndex < lineTextInfo.wordInfos.length; wordIndex++) {
           const wordInfo = lineTextInfo.wordInfos[wordIndex];
           if (!wordInfo) continue;
+
+          const wordStartChar = charIndex;
 
           // Add each character with its font features
           for (let i = wordInfo.startIndex; i <= wordInfo.endIndex; i++) {
@@ -270,7 +305,16 @@ if (!isExpoGo) {
             } else {
               paragraphBuilder.addText(char);
             }
+            charIndex++;
           }
+
+          const wordEndChar = charIndex;
+          wordPositions.push({
+            startChar: wordStartChar,
+            endChar: wordEndChar,
+            wordIndex,
+            text: wordInfo.text,
+          });
 
           // Add space with appropriate spacing
           const spaceType = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
@@ -284,6 +328,7 @@ if (!isExpoGo) {
             paragraphBuilder.pushStyle(spaceStyle);
             paragraphBuilder.addText(' ');
             paragraphBuilder.pop();
+            charIndex++;
           }
         }
 
@@ -304,6 +349,60 @@ if (!isExpoGo) {
           xPos = -(maxWidth - pageWidth + effectiveMargin);
         }
 
+        // Calculate word rectangles for this line by measuring each word
+        // For RTL text, we start from the right edge and work left
+        const lineHeight = layout.interline;
+        
+        // Calculate where the text starts on screen (right edge for RTL)
+        // xPos positions the paragraph, currLineWidth is the actual text width
+        const lineRightEdge = pageWidth - effectiveMargin;
+        
+        // Measure each word and calculate positions
+        let currentX = lineRightEdge; // Start from right for RTL
+        
+        for (let wi = 0; wi < lineTextInfo.wordInfos.length; wi++) {
+          const wordInfo = lineTextInfo.wordInfos[wi];
+          if (!wordInfo) continue;
+          
+          // Measure this word's width
+          const wordBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
+          wordBuilder.pushStyle(textStyle);
+          wordBuilder.addText(wordInfo.text);
+          wordBuilder.pop();
+          const wordPara = wordBuilder.build();
+          wordPara.layout(maxWidth);
+          const wordWidth = wordPara.getLongestLine();
+          wordPara.dispose();
+          
+          // Calculate word position (RTL: subtract width from current position)
+          const wordX = currentX - wordWidth;
+          
+          allWordRects.push({
+            x: wordX,
+            y: currentYPos,
+            width: wordWidth,
+            height: lineHeight,
+            wordIndex: wi,
+            lineIndex,
+            wordText: wordInfo.text,
+          });
+          
+          // Move left for next word (add space width)
+          const spaceType = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
+          const spaceWidth = spaceType !== undefined 
+            ? (spaceType === SpaceType.Aya ? justResult.ayaSpacing : justResult.simpleSpacing) * scale
+            : 0;
+          currentX = wordX - spaceWidth;
+        }
+        
+        // Debug log for first line
+        if (lineIndex === 0 && allWordRects.length > 0) {
+          const firstRect = allWordRects[allWordRects.length - lineTextInfo.wordInfos.length];
+          if (firstRect) {
+            console.log(`Line 0: ${lineTextInfo.wordInfos.length} words, first word at x=${firstRect.x.toFixed(0)}, y=${firstRect.y.toFixed(0)}`);
+          }
+        }
+
         return {
           paragraph,
           xPos,
@@ -311,7 +410,74 @@ if (!isExpoGo) {
           maxWidth,
         };
       });
+
+      return { paragraphs: paragraphData, wordRects: allWordRects };
     }, [fontMgr, pageText, pageIndex, layout, pageWidth, topPadding]);
+
+    // Handle tap on canvas
+    const handlePress = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
+      const { locationX, locationY } = event.nativeEvent;
+      
+      console.log(`Tap at (${locationX.toFixed(0)}, ${locationY.toFixed(0)}), checking ${wordRects.length} word rects`);
+      
+      // Find the word at this position
+      for (const rect of wordRects) {
+        if (
+          locationX >= rect.x &&
+          locationX <= rect.x + rect.width &&
+          locationY >= rect.y &&
+          locationY <= rect.y + rect.height
+        ) {
+          console.log(`Found word: "${rect.wordText}" at (${rect.x.toFixed(0)}, ${rect.y.toFixed(0)}) size ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
+          // Adjust y position to be closer to visible text (add offset for better tooltip positioning)
+          // The actual text is rendered lower in the line due to font metrics
+          const adjustedY = rect.y + rect.height * 0.7; // Position tooltip closer to text
+          setTooltip({
+            visible: true,
+            position: {
+              x: rect.x,
+              y: adjustedY,
+              width: rect.width,
+            },
+            wordIndex: rect.wordIndex,
+            lineIndex: rect.lineIndex,
+            wordText: rect.wordText,
+          });
+          return;
+        }
+      }
+      
+      // Log first few word rects for debugging
+      const firstRect = wordRects[0];
+      if (firstRect) {
+        console.log('First word rect:', JSON.stringify({
+          x: firstRect.x.toFixed(0),
+          y: firstRect.y.toFixed(0),
+          w: firstRect.width.toFixed(0),
+          h: firstRect.height.toFixed(0),
+          text: firstRect.wordText,
+        }));
+      }
+      
+      // No word found at tap position, close tooltip if open
+      if (tooltip.visible) {
+        setTooltip(prev => ({ ...prev, visible: false }));
+      }
+    }, [wordRects, tooltip.visible]);
+
+    const handleCloseTooltip = useCallback(() => {
+      setTooltip(prev => ({ ...prev, visible: false }));
+    }, []);
+
+    const handleHifz = useCallback(() => {
+      console.log('Hifz pressed for word:', tooltip.wordText, 'at line:', tooltip.lineIndex);
+      // TODO: Implement Hifz functionality
+    }, [tooltip.wordText, tooltip.lineIndex]);
+
+    const handleTajweed = useCallback(() => {
+      console.log('Tajweed pressed for word:', tooltip.wordText, 'at line:', tooltip.lineIndex);
+      // TODO: Implement Tajweed functionality
+    }, [tooltip.wordText, tooltip.lineIndex]);
 
     if (!fontMgr) {
       return (
@@ -332,17 +498,27 @@ if (!isExpoGo) {
 
     return (
       <View style={[styles.container, { width: pageWidth, height: pageHeight }]}>
-        <Canvas style={styles.canvas}>
-          {paragraphs.map((item, lineIndex) => (
-            <Paragraph
-              key={`${pageIndex}-${lineIndex}`}
-              paragraph={item.paragraph}
-              x={item.xPos}
-              y={item.yPos}
-              width={item.maxWidth}
-            />
-          ))}
-        </Canvas>
+        <Pressable style={styles.canvas} onPress={handlePress}>
+          <Canvas style={styles.canvas}>
+            {paragraphs.map((item, lineIndex) => (
+              <Paragraph
+                key={`${pageIndex}-${lineIndex}`}
+                paragraph={item.paragraph}
+                x={item.xPos}
+                y={item.yPos}
+                width={item.maxWidth}
+              />
+            ))}
+          </Canvas>
+        </Pressable>
+        
+        <WordTooltip
+          visible={tooltip.visible}
+          position={tooltip.position}
+          onClose={handleCloseTooltip}
+          onHifz={handleHifz}
+          onTajweed={handleTajweed}
+        />
       </View>
     );
   };
