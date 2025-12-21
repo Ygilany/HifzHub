@@ -5,7 +5,7 @@ import {
   InfoCard,
   InfoRow,
   ProgressRing,
-  SessionCard,
+  SessionWithAssignments,
   StatCard,
   StatRow,
 } from '@/components/student-profile';
@@ -293,21 +293,15 @@ export default function StudentProfileScreen() {
               <ThemedText style={styles.sectionTitle}>Recent Sessions</ThemedText>
             </View>
 
-            {profile.recentSessions.slice(0, 5).map((session) => (
-              <SessionCard
+            {profile.recentSessions.map((session) => (
+              <SessionWithAssignments
                 key={session.id}
                 date={session.date}
-                type={session.type}
                 attendance={session.attendance}
                 duration={session.duration}
-                startSurah={session.startSurah}
-                startAyah={session.startAyah}
-                endSurah={session.endSurah}
-                endAyah={session.endAyah}
-                ayahsCovered={session.ayahsCovered}
                 qualityRating={session.qualityRating}
                 teacherName={session.teacherName}
-                notes={session.notes}
+                assignments={session.assignments}
               />
             ))}
           </View>
@@ -433,6 +427,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bottomPadding: {
-    height: 40,
+    height: 100,
   },
 });

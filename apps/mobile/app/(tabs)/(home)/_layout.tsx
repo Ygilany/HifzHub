@@ -7,7 +7,8 @@ export default function HomeLayout() {
       <Stack.Screen name="classes" />
       <Stack.Screen name="students" />
       <Stack.Screen name="class/[id]" />
-      <Stack.Screen name="student/[id]" />
+      <Stack.Screen name="student/[id]/index" />
+      <Stack.Screen name="student/[id]/new-session" />
     </Stack>
   );
 }
