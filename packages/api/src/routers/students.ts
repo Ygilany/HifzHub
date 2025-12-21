@@ -4,6 +4,7 @@
  */
 
 import {
+  assignments,
   programStudents,
   sessions,
   studentGoals,
@@ -76,11 +77,11 @@ export const studentsRouter = router({
         orderBy: [desc(studentGoals.createdAt)],
       });
 
-      // Get recent sessions (last 10)
+      // Get recent sessions (last 2) with their assignments
       const recentSessions = await ctx.db.query.sessions.findMany({
         where: eq(sessions.studentId, studentId),
         orderBy: [desc(sessions.sessionDate)],
-        limit: 10,
+        limit: 2,
         with: {
           teacher: {
             columns: {
@@ -90,6 +91,16 @@ export const studentsRouter = router({
           },
         },
       });
+
+      // Get assignments for recent sessions
+      const sessionIds = recentSessions.map((s) => s.id);
+      const sessionAssignments =
+        sessionIds.length > 0
+          ? await ctx.db.query.assignments.findMany({
+              where: inArray(assignments.sessionId, sessionIds),
+              orderBy: [desc(assignments.createdAt)],
+            })
+          : [];
 
       // Get session statistics
       const sessionStats = await ctx.db
@@ -164,22 +175,32 @@ export const studentsRouter = router({
         // Parent/guardian info
         parents: parentsData.map((p) => p.parent),
 
-        // Session history
-        recentSessions: recentSessions.map((s) => ({
-          id: s.id,
-          date: s.sessionDate,
-          type: s.sessionType,
-          attendance: s.attendanceStatus,
-          duration: s.durationMinutes,
-          startSurah: s.startSurah,
-          startAyah: s.startAyah,
-          endSurah: s.endSurah,
-          endAyah: s.endAyah,
-          ayahsCovered: s.ayahsCovered,
-          qualityRating: s.qualityRating,
-          teacherName: s.teacher.name,
-          notes: s.teacherNotes,
-        })),
+        // Session history with assignments
+        recentSessions: recentSessions.map((s) => {
+          const assignmentsForSession = sessionAssignments.filter(
+            (a) => a.sessionId === s.id
+          );
+          return {
+            id: s.id,
+            date: s.sessionDate,
+            attendance: s.attendanceStatus,
+            duration: s.durationMinutes,
+            qualityRating: s.qualityRating,
+            teacherName: s.teacher.name,
+            notes: s.teacherNotes,
+            assignments: assignmentsForSession.map((a) => ({
+              id: a.id,
+              type: a.type,
+              status: a.status,
+              startSurah: a.startSurah,
+              startAyah: a.startAyah,
+              endSurah: a.endSurah,
+              endAyah: a.endAyah,
+              ayahCount: a.ayahCount,
+              grade: a.grade,
+            })),
+          };
+        }),
 
         // Statistics
         stats: {
