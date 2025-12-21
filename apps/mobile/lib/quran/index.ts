@@ -3,4 +3,5 @@ export * from './quran-service';
 export * from './just-service';
 export * from './tajweed-service';
 export * from './use-quran-font';
+export * from './quran-range-service';
 
