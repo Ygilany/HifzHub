@@ -6,6 +6,7 @@ import { authRouter } from './routers/auth';
 import { parentsRouter } from './routers/parents';
 import { teachersRouter } from './routers/teachers';
 import { studentsRouter } from './routers/students';
+import { sessionsRouter } from './routers/sessions';
 import { programsRouter } from './routers/programs';
 import { classesRouter } from './routers/classes';
 import { testRouter } from './routers/test';
@@ -20,6 +21,7 @@ export const appRouter = router({
   auth: authRouter,
   teachers: teachersRouter,
   students: studentsRouter,
+  sessions: sessionsRouter,
   parents: parentsRouter,
   programs: programsRouter,
   classes: classesRouter,
