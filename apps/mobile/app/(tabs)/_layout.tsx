@@ -1,45 +1,58 @@
-import { Ionicons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
 import React from 'react';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
     <NativeTabs minimizeBehavior={`automatic`}>
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
-        <Icon
-          src={{
-            default: <VectorIcon family={Ionicons} name="home-outline" />,
-            selected: <VectorIcon family={Ionicons} name="home" />,
-          }}
-        />
+        {
+          Platform.select({
+            ios: <Icon sf={{ default: "house", selected: "house.fill" }} />,
+            android: <Icon src={{ 
+              default: <VectorIcon family={MaterialIcons} name="home" />, 
+              selected: <VectorIcon family={MaterialIcons} name="home" /> 
+            }} />,
+          })
+        }
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="new-session" role="search">
         <Label>New Session</Label>
-        <Icon
-          src={{
-            default: <VectorIcon family={Ionicons} name="add-circle-outline" />,
-            selected: <VectorIcon family={Ionicons} name="add-circle" />,
-          }}
-        />
+        {
+          Platform.select({
+            ios: <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} />,
+            android: <Icon src={{ 
+              default: <VectorIcon family={MaterialIcons} name="add" />, 
+              selected: <VectorIcon family={MaterialIcons} name="add" /> 
+            }} />,
+          })
+        }
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reader">
         <Label>Quran</Label>
-        <Icon
-          src={{
-            default: <VectorIcon family={Ionicons} name="book-outline" />,
-            selected: <VectorIcon family={Ionicons} name="book" />,
-          }}
-        />
+        {
+          Platform.select({
+            ios: <Icon sf={{ default: "book", selected: "book.fill" }} />,
+            android: <Icon src={{ 
+              default: <VectorIcon family={MaterialIcons} name="book" />,
+              selected: <VectorIcon family={MaterialIcons} name="book" />
+            }} />,
+          })
+        }
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="explore">
         <Label>Profile</Label>
-        <Icon
-          src={{
-            default: <VectorIcon family={Ionicons} name="person-outline" />,
-            selected: <VectorIcon family={Ionicons} name="person" />,
-          }}
-        />
+        {
+          Platform.select({
+            ios: <Icon sf={{ default: "person", selected: "person.fill" }} />,
+            android: <Icon src={{
+              default: <VectorIcon family={MaterialIcons} name="person" />,
+              selected: <VectorIcon family={MaterialIcons} name="person" />
+            }} />,
+          })
+        }
       </NativeTabs.Trigger>
     </NativeTabs>
   );
