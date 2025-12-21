@@ -4,13 +4,22 @@ import React from 'react';
 
 export default function TabLayout() {
   return (
-    <NativeTabs>
+    <NativeTabs minimizeBehavior={`automatic`}>
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
         <Icon
           src={{
             default: <VectorIcon family={Ionicons} name="home-outline" />,
             selected: <VectorIcon family={Ionicons} name="home" />,
+          }}
+        />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="new-session" role="search">
+        <Label>New Session</Label>
+        <Icon
+          src={{
+            default: <VectorIcon family={Ionicons} name="add-circle-outline" />,
+            selected: <VectorIcon family={Ionicons} name="add-circle" />,
           }}
         />
       </NativeTabs.Trigger>
