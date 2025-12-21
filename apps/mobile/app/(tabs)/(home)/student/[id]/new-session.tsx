@@ -1,6 +1,9 @@
+import { RangePicker } from '@/components/quran';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { SurahRange } from '@/lib/quran/quran-range-service';
+import { SURAH_NAMES } from '@/lib/quran/types';
 import { api } from '@/lib/trpc/client';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -59,12 +62,50 @@ export default function NewSessionScreen() {
     { enabled: !!studentId }
   );
 
+  // Helper function to get range display data
+  const getRangeDisplayData = (assignment: AssignmentInput) => {
+    if (
+      !assignment.startSurah ||
+      !assignment.startAyah ||
+      !assignment.endSurah ||
+      !assignment.endAyah ||
+      assignment.startSurah.trim() === '' ||
+      assignment.startAyah.trim() === '' ||
+      assignment.endSurah.trim() === '' ||
+      assignment.endAyah.trim() === ''
+    ) {
+      return null;
+    }
+
+    const startSurahNum = parseInt(assignment.startSurah, 10);
+    const startAyahNum = parseInt(assignment.startAyah, 10);
+    const endSurahNum = parseInt(assignment.endSurah, 10);
+    const endAyahNum = parseInt(assignment.endAyah, 10);
+
+    if (isNaN(startSurahNum) || isNaN(startAyahNum) || isNaN(endSurahNum) || isNaN(endAyahNum)) {
+      return null;
+    }
+
+    const startSurahName = SURAH_NAMES[startSurahNum] || `Surah ${startSurahNum}`;
+    const endSurahName = SURAH_NAMES[endSurahNum] || `Surah ${endSurahNum}`;
+
+    return {
+      startSurahName,
+      startAyahNum,
+      endSurahName,
+      endAyahNum,
+      isSameSurah: startSurahNum === endSurahNum,
+    };
+  };
+
   // Form state
   const [attendance, setAttendance] = useState<AttendanceStatus>('PRESENT');
   const [duration, setDuration] = useState('');
   const [qualityRating, setQualityRating] = useState<number | null>(null);
   const [teacherNotes, setTeacherNotes] = useState('');
   const [assignments, setAssignments] = useState<AssignmentInput[]>([]);
+  const [rangePickerVisible, setRangePickerVisible] = useState(false);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
 
   const createSession = api.sessions.create.useMutation({
     onSuccess: () => {
@@ -101,6 +142,42 @@ export default function NewSessionScreen() {
     setAssignments(assignments.filter((a) => a.id !== id));
   };
 
+  const openRangePicker = (assignmentId: string) => {
+    setEditingAssignmentId(assignmentId);
+    setRangePickerVisible(true);
+  };
+
+  const handleRangeSelect = (range: SurahRange) => {
+    if (!editingAssignmentId) {
+      console.warn('No editing assignment ID when range selected');
+      return;
+    }
+
+    console.log('Range selected:', range);
+    console.log('Updating assignment:', editingAssignmentId);
+
+    // Update all fields in a single state update
+    setAssignments(
+      assignments.map((a) => {
+        if (a.id === editingAssignmentId) {
+          const updated = {
+            ...a,
+            startSurah: range.startSurah.toString(),
+            startAyah: range.startAyah.toString(),
+            endSurah: range.endSurah.toString(),
+            endAyah: range.endAyah.toString(),
+          };
+          console.log('Updated assignment:', updated);
+          return updated;
+        }
+        return a;
+      })
+    );
+
+    setRangePickerVisible(false);
+    setEditingAssignmentId(null);
+  };
+
   const handleSubmit = () => {
     // Validate assignments
     const validAssignments = assignments
@@ -109,7 +186,11 @@ export default function NewSessionScreen() {
           a.startSurah &&
           a.startAyah &&
           a.endSurah &&
-          a.endAyah
+          a.endAyah &&
+          a.startSurah.trim() !== '' &&
+          a.startAyah.trim() !== '' &&
+          a.endSurah.trim() !== '' &&
+          a.endAyah.trim() !== ''
       )
       .map((a) => ({
         type: a.type,
@@ -253,7 +334,7 @@ export default function NewSessionScreen() {
                   No assignments added yet
                 </ThemedText>
                 <ThemedText style={[styles.emptySubtext, { color: mutedColor }]}>
-                  Tap "Add" to record what was covered
+                  Tap &quot;Add&quot; to record what was covered
                 </ThemedText>
               </View>
             ) : (
@@ -300,47 +381,60 @@ export default function NewSessionScreen() {
                   <ThemedText style={[styles.rangeLabel, { color: mutedColor }]}>
                     Quran Range
                   </ThemedText>
-                  <View style={styles.rangeRow}>
-                    <View style={styles.rangeField}>
-                      <TextInput
-                        style={[styles.rangeInput, { borderColor, color: textColor }]}
-                        value={assignment.startSurah}
-                        onChangeText={(v) => updateAssignment(assignment.id, 'startSurah', v)}
-                        placeholder="Surah"
-                        placeholderTextColor={mutedColor}
-                        keyboardType="number-pad"
-                      />
-                      <ThemedText style={[styles.rangeSeparator, { color: mutedColor }]}>:</ThemedText>
-                      <TextInput
-                        style={[styles.rangeInput, { borderColor, color: textColor }]}
-                        value={assignment.startAyah}
-                        onChangeText={(v) => updateAssignment(assignment.id, 'startAyah', v)}
-                        placeholder="Ayah"
-                        placeholderTextColor={mutedColor}
-                        keyboardType="number-pad"
-                      />
+                  <Pressable
+                    onPress={() => openRangePicker(assignment.id)}
+                    style={[styles.rangeButton, { borderColor, backgroundColor: cardColor }]}
+                  >
+                    <View style={styles.rangeButtonContent}>
+                      {(() => {
+                        const rangeData = getRangeDisplayData(assignment);
+                        if (!rangeData) {
+                          return (
+                            <ThemedText style={[styles.rangeButtonPlaceholder, { color: mutedColor }]}>
+                              Tap to select range
+                            </ThemedText>
+                          );
+                        }
+
+                        return (
+                          <View style={styles.rangeTextContainer}>
+                            {rangeData.isSameSurah ? (
+                              <>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeArabicText]}>
+                                  {rangeData.startSurahName}
+                                </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeSeparator]}> - </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeNumberText]}>
+                                  {rangeData.startAyahNum}
+                                </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeSeparator]}> to </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeNumberText]}>
+                                  {rangeData.endAyahNum}
+                                </ThemedText>
+                              </>
+                            ) : (
+                              <>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeArabicText]}>
+                                  {rangeData.startSurahName}
+                                </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeNumberText]}>
+                                  {` ${rangeData.startAyahNum}`}
+                                </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeSeparator]}> to </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeArabicText]}>
+                                  {rangeData.endSurahName}
+                                </ThemedText>
+                                <ThemedText style={[styles.rangeButtonText, styles.rangeNumberText]}>
+                                  {` ${rangeData.endAyahNum}`}
+                                </ThemedText>
+                              </>
+                            )}
+                          </View>
+                        );
+                      })()}
+                      <Ionicons name="chevron-forward" size={20} color={mutedColor} style={styles.rangeButtonIcon} />
                     </View>
-                    <ThemedText style={[styles.toText, { color: mutedColor }]}>to</ThemedText>
-                    <View style={styles.rangeField}>
-                      <TextInput
-                        style={[styles.rangeInput, { borderColor, color: textColor }]}
-                        value={assignment.endSurah}
-                        onChangeText={(v) => updateAssignment(assignment.id, 'endSurah', v)}
-                        placeholder="Surah"
-                        placeholderTextColor={mutedColor}
-                        keyboardType="number-pad"
-                      />
-                      <ThemedText style={[styles.rangeSeparator, { color: mutedColor }]}>:</ThemedText>
-                      <TextInput
-                        style={[styles.rangeInput, { borderColor, color: textColor }]}
-                        value={assignment.endAyah}
-                        onChangeText={(v) => updateAssignment(assignment.id, 'endAyah', v)}
-                        placeholder="Ayah"
-                        placeholderTextColor={mutedColor}
-                        keyboardType="number-pad"
-                      />
-                    </View>
-                  </View>
+                  </Pressable>
 
                   {/* Grade */}
                   <View style={styles.gradeRow}>
@@ -401,6 +495,46 @@ export default function NewSessionScreen() {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Range Picker Modal */}
+      {editingAssignmentId && (
+        <RangePicker
+          visible={rangePickerVisible}
+          onClose={() => {
+            setRangePickerVisible(false);
+            setEditingAssignmentId(null);
+          }}
+          onSelect={handleRangeSelect}
+          initialRange={(() => {
+            const assignment = assignments.find((a) => a.id === editingAssignmentId);
+            if (
+              assignment &&
+              assignment.startSurah &&
+              assignment.startAyah &&
+              assignment.endSurah &&
+              assignment.endAyah &&
+              assignment.startSurah.trim() !== '' &&
+              assignment.startAyah.trim() !== '' &&
+              assignment.endSurah.trim() !== '' &&
+              assignment.endAyah.trim() !== ''
+            ) {
+              const startSurah = parseInt(assignment.startSurah, 10);
+              const startAyah = parseInt(assignment.startAyah, 10);
+              const endSurah = parseInt(assignment.endSurah, 10);
+              const endAyah = parseInt(assignment.endAyah, 10);
+              if (!isNaN(startSurah) && !isNaN(startAyah) && !isNaN(endSurah) && !isNaN(endAyah)) {
+                return {
+                  startSurah,
+                  startAyah,
+                  endSurah,
+                  endAyah,
+                };
+              }
+            }
+            return undefined;
+          })()}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -571,32 +705,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 6,
   },
-  rangeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rangeField: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rangeInput: {
-    flex: 1,
-    height: 40,
+  rangeButton: {
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  rangeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flex: 1,
+  },
+  rangeTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  rangeButtonText: {
     fontSize: 14,
-    textAlign: 'center',
+    fontWeight: '600',
+  },
+  rangeArabicText: {
+    writingDirection: 'rtl',
+    textAlign: 'right',
+  },
+  rangeNumberText: {
+    writingDirection: 'ltr',
+    textAlign: 'left',
   },
   rangeSeparator: {
-    fontSize: 16,
-    fontWeight: '600',
+    writingDirection: 'ltr',
+    textAlign: 'left',
     marginHorizontal: 4,
   },
-  toText: {
-    fontSize: 12,
+  rangeButtonPlaceholder: {
+    fontSize: 14,
+    flex: 1,
+  },
+  rangeButtonIcon: {
+    marginLeft: 'auto',
   },
   gradeRow: {
     flexDirection: 'row',
