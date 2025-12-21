@@ -78,8 +78,8 @@ export const sessions = pgTable("sessions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Relations
-export const sessionsRelations = relations(sessions, ({ one }) => ({
+// Relations - note: assignments relation is defined in assignments.ts to avoid circular imports
+export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   student: one(users, {
     fields: [sessions.studentId],
     references: [users.id],
