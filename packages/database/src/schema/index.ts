@@ -5,4 +5,5 @@ export * from "./relationships";
 export * from "./student-profiles";
 export * from "./goals";
 export * from "./sessions";
+export * from "./assignments";
 
