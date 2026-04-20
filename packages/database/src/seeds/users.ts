@@ -4,9 +4,9 @@ import { hashPassword } from "../utils/password";
 
 const TEST_USERS = [
   { email: "admin@hifzhub.com",   name: "Admin User",    role: "ADMIN"   as const },
-  { email: "teacher@hifzhub.com", name: "Umar Siddiqui", role: "TEACHER" as const },
+  { email: "teacher@hifzhub.com", name: "Sheikh Mahmoud", role: "TEACHER" as const },
   { email: "ahmad@hifzhub.com",   name: "Ahmad Khan",    role: "STUDENT" as const },
-  { email: "sara@hifzhub.com",    name: "Sara Ahmed",    role: "STUDENT" as const },
+  { email: "sara@hifzhub.com",    name: "Yahya Gilany",    role: "STUDENT" as const },
   { email: "khalid@hifzhub.com",  name: "Khalid Khan",   role: "PARENT"  as const, phone: "+1 (555) 012-3456" },
 ];
 
