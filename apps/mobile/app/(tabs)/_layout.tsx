@@ -3,9 +3,11 @@ import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native
 import React from 'react';
 import { Platform } from 'react-native';
 
+import { GlassTheme } from '@/constants/glass-theme';
+
 export default function TabLayout() {
   return (
-    <NativeTabs minimizeBehavior={`automatic`}>
+    <NativeTabs minimizeBehavior={`automatic`} tintColor={GlassTheme.primary}>
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
         {
@@ -38,18 +40,6 @@ export default function TabLayout() {
             android: <Icon src={{ 
               default: <VectorIcon family={MaterialIcons} name="book" />,
               selected: <VectorIcon family={MaterialIcons} name="book" />
-            }} />,
-          })
-        }
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="explore">
-        <Label>Profile</Label>
-        {
-          Platform.select({
-            ios: <Icon sf={{ default: "person", selected: "person.fill" }} />,
-            android: <Icon src={{
-              default: <VectorIcon family={MaterialIcons} name="person" />,
-              selected: <VectorIcon family={MaterialIcons} name="person" />
             }} />,
           })
         }
