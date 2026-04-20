@@ -11,6 +11,7 @@ import {
   studentParents,
   studentProfiles,
   users,
+  wordMistakes,
 } from "@hifzhub/database/schema";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
@@ -286,6 +287,49 @@ export const studentsRouter = router({
   /**
    * Get student's goals
    */
+  /**
+   * Get the latest batch of word mistakes recorded for a student.
+   * Accessible by the student themselves, their teacher, or a parent.
+   */
+  getWordMistakes: protectedProcedure
+    .input(z.object({ studentId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const { studentId } = input;
+
+      // Find the most recent recorded_at for this student
+      const latest = await ctx.db
+        .select({
+          batchId: wordMistakes.batchId,
+          recordedAt: wordMistakes.recordedAt,
+        })
+        .from(wordMistakes)
+        .where(eq(wordMistakes.studentId, studentId))
+        .orderBy(desc(wordMistakes.recordedAt))
+        .limit(1);
+
+      if (!latest[0]) return { mistakes: [], recordedAt: null };
+
+      const { batchId, recordedAt } = latest[0];
+
+      const mistakes = await ctx.db.query.wordMistakes.findMany({
+        where: and(
+          eq(wordMistakes.studentId, studentId),
+          eq(wordMistakes.batchId, batchId),
+        ),
+      });
+
+      return {
+        mistakes: mistakes.map((m) => ({
+          pageIndex: m.pageIndex,
+          lineIndex: m.lineIndex,
+          wordIndex: m.wordIndex,
+          wordText: m.wordText,
+          mistakeType: m.mistakeType,
+        })),
+        recordedAt,
+      };
+    }),
+
   getGoals: protectedProcedure
     .input(
       z.object({

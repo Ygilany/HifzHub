@@ -3,9 +3,14 @@
  * Handles teacher-specific operations
  */
 
-import { programStudents, programTeachers } from '@hifzhub/database/schema';
+import {
+  classes,
+  programStudents,
+  programTeachers,
+  programs,
+} from '@hifzhub/database/schema';
 import { TRPCError } from '@trpc/server';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { protectedProcedure, router } from '../trpc';
 
 export const teachersRouter = router({
@@ -109,4 +114,104 @@ export const teachersRouter = router({
 
     return relationships.map((rel) => rel.program);
   }),
+
+  /**
+   * Create a class for the logged-in teacher.
+   * - If `programId` is provided, the class is created in that program (after
+   *   verifying the teacher belongs to it).
+   * - Otherwise, the class is created in the teacher's first existing program;
+   *   if the teacher has no programs yet, a default one is created and the
+   *   teacher is associated with it.
+   */
+  createClass: protectedProcedure
+    .input((val: unknown) => {
+      if (
+        typeof val === 'object' &&
+        val !== null &&
+        'name' in val &&
+        typeof (val as { name: unknown }).name === 'string'
+      ) {
+        const v = val as {
+          name: string;
+          description?: unknown;
+          programId?: unknown;
+          programName?: unknown;
+        };
+        const name = v.name.trim();
+        if (!name) throw new Error('Invalid input: name cannot be empty');
+        return {
+          name,
+          description:
+            typeof v.description === 'string' ? v.description : undefined,
+          programId: typeof v.programId === 'string' ? v.programId : undefined,
+          programName:
+            typeof v.programName === 'string' ? v.programName.trim() : undefined,
+        };
+      }
+      throw new Error('Invalid input: name is required');
+    })
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+
+      if (ctx.user.role !== 'TEACHER') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only teachers can create classes',
+        });
+      }
+
+      let programId = input.programId;
+
+      if (programId) {
+        const membership = await ctx.db.query.programTeachers.findFirst({
+          where: and(
+            eq(programTeachers.programId, programId),
+            eq(programTeachers.teacherId, userId),
+          ),
+        });
+        if (!membership) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You are not a teacher in this program',
+          });
+        }
+      } else {
+        const existing = await ctx.db.query.programTeachers.findFirst({
+          where: eq(programTeachers.teacherId, userId),
+          columns: { programId: true },
+        });
+        if (existing) {
+          programId = existing.programId;
+        } else {
+          const [newProgram] = await ctx.db
+            .insert(programs)
+            .values({
+              name: input.programName ?? 'My Program',
+            })
+            .returning();
+          if (!newProgram) {
+            throw new TRPCError({
+              code: 'INTERNAL_SERVER_ERROR',
+              message: 'Failed to create program',
+            });
+          }
+          programId = newProgram.id;
+          await ctx.db.insert(programTeachers).values({
+            programId,
+            teacherId: userId,
+          });
+        }
+      }
+
+      const [newClass] = await ctx.db
+        .insert(classes)
+        .values({
+          programId,
+          name: input.name,
+          description: input.description,
+        })
+        .returning();
+
+      return newClass;
+    }),
 });

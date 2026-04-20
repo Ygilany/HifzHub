@@ -2,6 +2,7 @@
  * Root tRPC router that combines all sub-routers
  */
 
+import { announcementsRouter } from './routers/announcements';
 import { authRouter } from './routers/auth';
 import { parentsRouter } from './routers/parents';
 import { teachersRouter } from './routers/teachers';
@@ -25,6 +26,7 @@ export const appRouter = router({
   parents: parentsRouter,
   programs: programsRouter,
   classes: classesRouter,
+  announcements: announcementsRouter,
 });
 
 // Export type definition of API

@@ -7,6 +7,7 @@ import {
   assignments,
   sessions,
   users,
+  wordMistakes,
 } from "@hifzhub/database/schema";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
@@ -128,6 +129,56 @@ export const sessionsRouter = router({
         id: newSession.id,
         success: true,
       };
+    }),
+
+  /**
+   * Save word-level mistakes recorded by a teacher for a student.
+   * Each call creates a new batch; students and teachers can later
+   * retrieve the latest batch via students.getWordMistakes.
+   */
+  recordWordMistakes: protectedProcedure
+    .input(
+      z.object({
+        studentId: z.string().uuid(),
+        mistakes: z.array(
+          z.object({
+            pageIndex: z.number().int().min(0),
+            lineIndex: z.number().int().min(0),
+            wordIndex: z.number().int().min(0),
+            wordText: z.string(),
+            mistakeType: z.enum(["memory", "tashkeel", "tajweed", "corrected"]),
+          }),
+        ),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "TEACHER") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only teachers can record mistakes",
+        });
+      }
+
+      const batchId = crypto.randomUUID();
+      const now = new Date();
+
+      if (input.mistakes.length > 0) {
+        await ctx.db.insert(wordMistakes).values(
+          input.mistakes.map((m) => ({
+            batchId,
+            studentId: input.studentId,
+            teacherId: ctx.user.id,
+            pageIndex: m.pageIndex,
+            lineIndex: m.lineIndex,
+            wordIndex: m.wordIndex,
+            wordText: m.wordText,
+            mistakeType: m.mistakeType,
+            recordedAt: now,
+          })),
+        );
+      }
+
+      return { batchId, saved: input.mistakes.length };
     }),
 
   /**
