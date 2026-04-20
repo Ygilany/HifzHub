@@ -1,18 +1,26 @@
-import { ThemedText } from '@/components/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { quranRangeService, SurahInfo, SurahRange } from '@/lib/quran/quran-range-service';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
+
+import { GlassFonts, GlassTheme } from '@/constants/glass-theme';
+import {
+  quranRangeService,
+  SurahInfo,
+  SurahRange,
+} from '@/lib/quran/quran-range-service';
 
 type RangeMode = 'ayahs' | 'surahs' | 'pages';
 
@@ -23,36 +31,30 @@ interface RangePickerProps {
   initialRange?: SurahRange;
 }
 
-export function RangePicker({ visible, onClose, onSelect, initialRange }: RangePickerProps) {
-  const backgroundColor = useThemeColor({}, 'background');
-  const cardColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-  const textColor = useThemeColor({}, 'text');
-  const mutedColor = useThemeColor({}, 'mutedForeground');
-  const tintColor = useThemeColor({}, 'tint');
-
+export function RangePicker({
+  visible,
+  onClose,
+  onSelect,
+  initialRange,
+}: RangePickerProps) {
   const [mode, setMode] = useState<RangeMode>('ayahs');
   const [isLoading, setIsLoading] = useState(true);
   const [surahs, setSurahs] = useState<SurahInfo[]>([]);
 
-  // Range state
   const [startSurah, setStartSurah] = useState(initialRange?.startSurah || 1);
   const [startAyah, setStartAyah] = useState(initialRange?.startAyah || 1);
   const [endSurah, setEndSurah] = useState(initialRange?.endSurah || 1);
   const [endAyah, setEndAyah] = useState(initialRange?.endAyah || 1);
   const [startPage, setStartPage] = useState<number | null>(null);
   const [endPage, setEndPage] = useState<number | null>(null);
-  
-  // Selection modals
+
   const [showStartSurahPicker, setShowStartSurahPicker] = useState(false);
   const [showStartAyahPicker, setShowStartAyahPicker] = useState(false);
   const [showEndSurahPicker, setShowEndSurahPicker] = useState(false);
   const [showEndAyahPicker, setShowEndAyahPicker] = useState(false);
 
   useEffect(() => {
-    if (visible) {
-      loadData();
-    }
+    if (visible) loadData();
   }, [visible]);
 
   useEffect(() => {
@@ -68,10 +70,7 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
     setIsLoading(true);
     try {
       await quranRangeService.initialize();
-      const allSurahs = quranRangeService.getAllSurahs();
-      setSurahs(allSurahs);
-
-      // If we have initial range, convert to pages
+      setSurahs(quranRangeService.getAllSurahs());
       if (initialRange) {
         const pageRange = await quranRangeService.surahRangeToPageRange(initialRange);
         if (pageRange) {
@@ -88,41 +87,32 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
 
   const handlePageChange = async (isStart: boolean, page: number) => {
     if (page < 1 || page > 604) return;
-
-    try {
-      if (isStart) {
-        setStartPage(page);
-        const range = quranRangeService.getAyahRangeForPage(page);
-        if (range) {
-          setStartSurah(range.start.surah);
-          setStartAyah(range.start.ayah);
-        }
-      } else {
-        setEndPage(page);
-        const range = quranRangeService.getAyahRangeForPage(page);
-        if (range) {
-          setEndSurah(range.end.surah);
-          setEndAyah(range.end.ayah);
-        }
+    const range = quranRangeService.getAyahRangeForPage(page);
+    if (isStart) {
+      setStartPage(page);
+      if (range) {
+        setStartSurah(range.start.surah);
+        setStartAyah(range.start.ayah);
       }
-    } catch (error) {
-      console.error('Error updating page range:', error);
+    } else {
+      setEndPage(page);
+      if (range) {
+        setEndSurah(range.end.surah);
+        setEndAyah(range.end.ayah);
+      }
     }
   };
 
   const handleSurahChange = (isStart: boolean, surah: number) => {
     const info = quranRangeService.getSurahInfo(surah);
     if (!info) return;
-
     if (isStart) {
       setStartSurah(surah);
       if (startAyah < info.firstAyah || startAyah > info.lastAyah) {
         setStartAyah(info.firstAyah);
       }
-      // Auto-populate end surah with the same value if it's not set or if it's the same as start
       if (endSurah === startSurah || endSurah < surah) {
         setEndSurah(surah);
-        // Also update end ayah if needed
         if (endAyah < info.firstAyah || endAyah > info.lastAyah) {
           setEndAyah(info.firstAyah);
         }
@@ -136,61 +126,47 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
   };
 
   const handleAyahChange = (isStart: boolean, ayah: number) => {
-    if (isStart) {
-      setStartAyah(ayah);
-    } else {
-      setEndAyah(ayah);
-    }
+    if (isStart) setStartAyah(ayah);
+    else setEndAyah(ayah);
+  };
+
+  const stepAyah = (isStart: boolean, delta: number) => {
+    const surah = isStart ? startSurah : endSurah;
+    const info = quranRangeService.getSurahInfo(surah);
+    if (!info) return;
+    const current = isStart ? startAyah : endAyah;
+    const next = Math.max(info.firstAyah, Math.min(info.lastAyah, current + delta));
+    handleAyahChange(isStart, next);
   };
 
   const handleConfirm = async () => {
-    // Ensure service is initialized
     await quranRangeService.initialize();
-    
-    const range: SurahRange = {
-      startSurah,
-      startAyah,
-      endSurah,
-      endAyah,
-    };
-
-    console.log('Range picker - confirming range:', range);
-    const isValid = quranRangeService.validateSurahRange(range);
-    console.log('Range validation result:', isValid);
-    
-    if (isValid) {
-      console.log('Calling onSelect with range:', range);
+    const range: SurahRange = { startSurah, startAyah, endSurah, endAyah };
+    if (quranRangeService.validateSurahRange(range)) {
       onSelect(range);
       onClose();
     } else {
-      // Show error if validation fails
-      console.warn('Range validation failed:', range);
       Alert.alert(
         'Invalid Range',
         'Please select a valid Quran range. The start must come before the end.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
     }
   };
 
-  const getCurrentSurahInfo = (surah: number): SurahInfo | null => {
-    return quranRangeService.getSurahInfo(surah);
-  };
-
-  const getAyahsForCurrentSurah = (surah: number): number[] => {
-    return quranRangeService.getAyahsForSurah(surah);
-  };
+  const getCurrentSurahInfo = (surah: number) =>
+    quranRangeService.getSurahInfo(surah);
+  const getAyahsForCurrentSurah = (surah: number) =>
+    quranRangeService.getAyahsForSurah(surah);
 
   if (isLoading) {
     return (
       <Modal visible={visible} transparent animationType="fade">
-        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: cardColor }]}>
-            <ActivityIndicator size="large" color={tintColor} />
-            <ThemedText style={[styles.loadingText, { color: mutedColor }]}>
-              Loading Quran data...
-            </ThemedText>
-          </View>
+        <View style={styles.modalOverlay}>
+          <GlassSheet>
+            <ActivityIndicator size="large" color={GlassTheme.primary} />
+            <Text style={styles.loadingText}>Loading Quran data...</Text>
+          </GlassSheet>
         </View>
       </Modal>
     );
@@ -198,223 +174,162 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-        <View style={[styles.modalContent, { backgroundColor: cardColor }]}>
+      <View style={styles.modalOverlay}>
+        <GlassSheet>
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: borderColor }]}>
-            <ThemedText style={styles.headerTitle}>Select Quran Range</ThemedText>
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={textColor} />
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerEyebrow}>QURAN RANGE</Text>
+              <Text style={styles.headerTitle}>Select range</Text>
+            </View>
+            <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8}>
+              <Ionicons name="close" size={22} color={GlassTheme.ink} />
             </Pressable>
           </View>
 
-          {/* Mode Selector */}
-          <View style={styles.modeSelector}>
-            {(['ayahs', 'surahs', 'pages'] as RangeMode[]).map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => setMode(m)}
-                style={[
-                  styles.modeButton,
-                  {
-                    backgroundColor: mode === m ? tintColor : 'transparent',
-                    borderColor: mode === m ? tintColor : borderColor,
-                  },
-                ]}
-              >
-                <ThemedText
-                  style={[
-                    styles.modeButtonText,
-                    { color: mode === m ? '#fff' : textColor },
-                  ]}
-                >
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
-                </ThemedText>
-              </Pressable>
-            ))}
+          {/* Mode Selector — segmented glass pills */}
+          <View style={styles.modeSelectorWrap}>
+            <View style={styles.modeSelector}>
+              {(['ayahs', 'surahs', 'pages'] as RangeMode[]).map((m) => {
+                const active = mode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setMode(m)}
+                    style={[styles.modeButton, active && styles.modeButtonActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        active && styles.modeButtonTextActive,
+                      ]}
+                    >
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
-          <ScrollView 
-            style={styles.scrollView} 
+          <ScrollView
+            style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
           >
-            {/* Start Range */}
-            <View style={[styles.rangeSection, mode === 'ayahs' && styles.rangeSectionCompact]}>
-              <ThemedText style={[styles.sectionTitle, mode === 'ayahs' && styles.sectionTitleCompact, { color: mutedColor }]}>
-                From
-              </ThemedText>
+            {/* From */}
+            <View style={styles.rangeSection}>
+              <Text style={styles.sectionTitle}>FROM</Text>
 
-              {mode === 'pages' && (
-                <View style={styles.inputRow}>
-                  <ThemedText style={[styles.label, { color: mutedColor }]}>Page</ThemedText>
-                  <TextInput
-                    style={[styles.numberInput, { borderColor, color: textColor }]}
-                    value={startPage?.toString() || ''}
-                    onChangeText={(v) => {
-                      const page = parseInt(v, 10);
-                      if (!isNaN(page) && page >= 1 && page <= 604) {
-                        handlePageChange(true, page);
-                      } else if (v === '') {
-                        setStartPage(null);
-                      }
-                    }}
-                    placeholder="1"
-                    placeholderTextColor={mutedColor}
-                    keyboardType="number-pad"
-                  />
-                  {startPage && startSurah && startAyah && (
-                    <ThemedText style={[styles.ayahDisplay, { color: mutedColor }]}>
-                      {getCurrentSurahInfo(startSurah)?.name} {startAyah}
-                    </ThemedText>
-                  )}
-                </View>
-              )}
-
-              {(mode === 'ayahs' || mode === 'surahs') && (
-                <View style={[styles.fromToRow, mode === 'ayahs' && styles.fromToRowCompact]}>
+              {mode === 'pages' ? (
+                <PageInputRow
+                  page={startPage}
+                  onChangePage={(p) => handlePageChange(true, p)}
+                  onClearPage={() => setStartPage(null)}
+                  surahLabel={
+                    startPage && startSurah && startAyah
+                      ? `${getCurrentSurahInfo(startSurah)?.name} ${startAyah}`
+                      : null
+                  }
+                />
+              ) : (
+                <View style={styles.fromToRow}>
                   <View style={styles.fromToField}>
-                    <ThemedText style={[styles.label, { color: mutedColor }]}>Surah</ThemedText>
-                    <Pressable
+                    <Text style={styles.label}>Surah</Text>
+                    <SurahPickerButton
+                      surah={startSurah}
+                      surahName={getCurrentSurahInfo(startSurah)?.name}
                       onPress={() => setShowStartSurahPicker(true)}
-                      style={[styles.pickerButton, { borderColor, backgroundColor: cardColor }]}
-                    >
-                      <View style={styles.pickerButtonContent}>
-                        <View style={styles.pickerButtonTextContainer}>
-                          <ThemedText style={styles.pickerButtonNumber}>{startSurah}</ThemedText>
-                          <ThemedText style={[styles.pickerButtonName, { color: mutedColor }]} numberOfLines={1}>
-                            {getCurrentSurahInfo(startSurah)?.name}
-                          </ThemedText>
-                        </View>
-                        <Ionicons name="chevron-down" size={20} color={mutedColor} />
-                      </View>
-                    </Pressable>
+                    />
                   </View>
-
                   {mode === 'ayahs' && (
-                    <View style={styles.fromToField}>
-                      <ThemedText style={[styles.label, { color: mutedColor }]}>Ayah</ThemedText>
-                      <Pressable
-                        onPress={() => setShowStartAyahPicker(true)}
-                        style={[styles.pickerButton, { borderColor, backgroundColor: cardColor }]}
-                      >
-                        <View style={styles.pickerButtonContent}>
-                          <ThemedText style={styles.pickerButtonNumber}>{startAyah}</ThemedText>
-                          <Ionicons name="chevron-down" size={20} color={mutedColor} />
-                        </View>
-                      </Pressable>
+                    <View style={styles.ayahFieldWrap}>
+                      <Text style={styles.label}>Ayah</Text>
+                      <AyahStepper
+                        value={startAyah}
+                        onDecrement={() => stepAyah(true, -1)}
+                        onIncrement={() => stepAyah(true, 1)}
+                        onPickerPress={() => setShowStartAyahPicker(true)}
+                      />
                     </View>
                   )}
                 </View>
               )}
             </View>
 
-            {/* End Range */}
-            <View style={[styles.rangeSection, mode === 'ayahs' && styles.rangeSectionCompact]}>
-              <ThemedText style={[styles.sectionTitle, mode === 'ayahs' && styles.sectionTitleCompact, { color: mutedColor }]}>To</ThemedText>
+            {/* To */}
+            <View style={styles.rangeSection}>
+              <Text style={styles.sectionTitle}>TO</Text>
 
-              {mode === 'pages' && (
-                <View style={styles.inputRow}>
-                  <ThemedText style={[styles.label, { color: mutedColor }]}>Page</ThemedText>
-                  <TextInput
-                    style={[styles.numberInput, { borderColor, color: textColor }]}
-                    value={endPage?.toString() || ''}
-                    onChangeText={(v) => {
-                      const page = parseInt(v, 10);
-                      if (!isNaN(page) && page >= 1 && page <= 604) {
-                        handlePageChange(false, page);
-                      } else if (v === '') {
-                        setEndPage(null);
-                      }
-                    }}
-                    placeholder="604"
-                    placeholderTextColor={mutedColor}
-                    keyboardType="number-pad"
-                  />
-                  {endPage && endSurah && endAyah && (
-                    <ThemedText style={[styles.ayahDisplay, { color: mutedColor }]}>
-                      {getCurrentSurahInfo(endSurah)?.name} {endAyah}
-                    </ThemedText>
-                  )}
-                </View>
-              )}
-
-              {(mode === 'ayahs' || mode === 'surahs') && (
-                <View style={[styles.fromToRow, mode === 'ayahs' && styles.fromToRowCompact]}>
+              {mode === 'pages' ? (
+                <PageInputRow
+                  page={endPage}
+                  onChangePage={(p) => handlePageChange(false, p)}
+                  onClearPage={() => setEndPage(null)}
+                  placeholder="604"
+                  surahLabel={
+                    endPage && endSurah && endAyah
+                      ? `${getCurrentSurahInfo(endSurah)?.name} ${endAyah}`
+                      : null
+                  }
+                />
+              ) : (
+                <View style={styles.fromToRow}>
                   <View style={styles.fromToField}>
-                    <ThemedText style={[styles.label, { color: mutedColor }]}>Surah</ThemedText>
-                    <Pressable
+                    <Text style={styles.label}>Surah</Text>
+                    <SurahPickerButton
+                      surah={endSurah}
+                      surahName={getCurrentSurahInfo(endSurah)?.name}
                       onPress={() => setShowEndSurahPicker(true)}
-                      style={[styles.pickerButton, { borderColor, backgroundColor: cardColor }]}
-                    >
-                      <View style={styles.pickerButtonContent}>
-                        <View style={styles.pickerButtonTextContainer}>
-                          <ThemedText style={styles.pickerButtonNumber}>{endSurah}</ThemedText>
-                          <ThemedText style={[styles.pickerButtonName, { color: mutedColor }]} numberOfLines={1}>
-                            {getCurrentSurahInfo(endSurah)?.name}
-                          </ThemedText>
-                        </View>
-                        <Ionicons name="chevron-down" size={20} color={mutedColor} />
-                      </View>
-                    </Pressable>
+                    />
                   </View>
-
                   {mode === 'ayahs' && (
-                    <View style={styles.fromToField}>
-                      <ThemedText style={[styles.label, { color: mutedColor }]}>Ayah</ThemedText>
-                      <Pressable
-                        onPress={() => setShowEndAyahPicker(true)}
-                        style={[styles.pickerButton, { borderColor, backgroundColor: cardColor }]}
-                      >
-                        <View style={styles.pickerButtonContent}>
-                          <ThemedText style={styles.pickerButtonNumber}>{endAyah}</ThemedText>
-                          <Ionicons name="chevron-down" size={20} color={mutedColor} />
-                        </View>
-                      </Pressable>
+                    <View style={styles.ayahFieldWrap}>
+                      <Text style={styles.label}>Ayah</Text>
+                      <AyahStepper
+                        value={endAyah}
+                        onDecrement={() => stepAyah(false, -1)}
+                        onIncrement={() => stepAyah(false, 1)}
+                        onPickerPress={() => setShowEndAyahPicker(true)}
+                      />
                     </View>
                   )}
                 </View>
               )}
             </View>
 
-            {/* Summary */}
-            <View style={[styles.summary, { backgroundColor: `${tintColor}15`, borderColor }]}>
-              <ThemedText style={[styles.summaryTitle, { color: mutedColor }]}>
-                Selected Range
-              </ThemedText>
-              <ThemedText style={styles.summaryText}>
+            {/* Summary card */}
+            <View style={styles.summary}>
+              <Text style={styles.summaryEyebrow}>SELECTED RANGE</Text>
+              <Text style={styles.summaryDisplay}>
                 {getCurrentSurahInfo(startSurah)?.name} {startAyah}
-              </ThemedText>
-              <ThemedText style={[styles.summaryText, { color: mutedColor }]}>to</ThemedText>
-              <ThemedText style={styles.summaryText}>
+              </Text>
+              <Text style={styles.summaryArrow}>↓</Text>
+              <Text style={styles.summaryDisplay}>
                 {getCurrentSurahInfo(endSurah)?.name} {endAyah}
-              </ThemedText>
+              </Text>
             </View>
           </ScrollView>
 
           {/* Footer */}
-          <View style={[styles.footer, { borderTopColor: borderColor }]}>
-            <Pressable
-              onPress={onClose}
-              style={[styles.footerButton, { borderColor }]}
-            >
-              <ThemedText style={[styles.footerButtonText, { color: textColor }]}>
-                Cancel
-              </ThemedText>
+          <View style={styles.footer}>
+            <Pressable onPress={onClose} style={styles.secondaryBtn}>
+              <Text style={styles.secondaryBtnText}>Cancel</Text>
             </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              style={[styles.footerButton, { backgroundColor: tintColor }]}
-            >
-              <ThemedText style={[styles.footerButtonText, { color: '#fff' }]}>
-                Confirm
-              </ThemedText>
+            <Pressable onPress={handleConfirm} style={styles.primaryBtnWrap}>
+              <LinearGradient
+                colors={[GlassTheme.primaryGlass, GlassTheme.primary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryBtn}
+              >
+                <Text style={styles.primaryBtnText}>Confirm</Text>
+              </LinearGradient>
             </Pressable>
           </View>
-        </View>
+        </GlassSheet>
       </View>
 
-      {/* Surah Picker Modals */}
       <SurahPickerModal
         visible={showStartSurahPicker}
         surahs={surahs}
@@ -436,7 +351,6 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
         onClose={() => setShowEndSurahPicker(false)}
       />
 
-      {/* Ayah Picker Modals */}
       <AyahPickerModal
         visible={showStartAyahPicker}
         surah={startSurah}
@@ -463,7 +377,108 @@ export function RangePicker({ visible, onClose, onSelect, initialRange }: RangeP
   );
 }
 
-// Surah Picker Modal Component
+// ---------- subcomponents ----------
+
+function GlassSheet({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.sheet}>
+      {Platform.OS === 'ios' && (
+        <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+      )}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: 'rgba(255,253,245,0.88)' },
+        ]}
+      />
+      <View style={styles.sheetContent}>{children}</View>
+    </View>
+  );
+}
+
+function SurahPickerButton({
+  surah,
+  surahName,
+  onPress,
+}: {
+  surah: number;
+  surahName?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.pickerButton}>
+      <View style={styles.pickerButtonContent}>
+        <View style={styles.pickerButtonTextContainer}>
+          <Text style={styles.pickerButtonNumber}>{surah}</Text>
+          <Text style={styles.pickerButtonName} numberOfLines={1}>
+            {surahName ?? '—'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-down" size={18} color={GlassTheme.inkSubtle} />
+      </View>
+    </Pressable>
+  );
+}
+
+function AyahStepper({
+  value,
+  onDecrement,
+  onIncrement,
+  onPickerPress,
+}: {
+  value: number;
+  onDecrement: () => void;
+  onIncrement: () => void;
+  onPickerPress: () => void;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Pressable onPress={onDecrement} style={styles.stepperBtn} hitSlop={4}>
+        <Ionicons name="remove" size={18} color={GlassTheme.primary} />
+      </Pressable>
+      <Pressable onPress={onPickerPress} style={styles.stepperValue}>
+        <Text style={styles.stepperValueText}>{value}</Text>
+      </Pressable>
+      <Pressable onPress={onIncrement} style={styles.stepperBtn} hitSlop={4}>
+        <Ionicons name="add" size={18} color={GlassTheme.primary} />
+      </Pressable>
+    </View>
+  );
+}
+
+function PageInputRow({
+  page,
+  onChangePage,
+  onClearPage,
+  surahLabel,
+  placeholder = '1',
+}: {
+  page: number | null;
+  onChangePage: (p: number) => void;
+  onClearPage: () => void;
+  surahLabel: string | null;
+  placeholder?: string;
+}) {
+  return (
+    <View style={styles.inputRow}>
+      <Text style={styles.label}>Page</Text>
+      <TextInput
+        style={styles.numberInput}
+        value={page?.toString() ?? ''}
+        onChangeText={(v) => {
+          const n = parseInt(v, 10);
+          if (!isNaN(n) && n >= 1 && n <= 604) onChangePage(n);
+          else if (v === '') onClearPage();
+        }}
+        placeholder={placeholder}
+        placeholderTextColor={GlassTheme.inkSubtle}
+        keyboardType="number-pad"
+      />
+      {surahLabel && <Text style={styles.ayahDisplay}>{surahLabel}</Text>}
+    </View>
+  );
+}
+
 function SurahPickerModal({
   visible,
   surahs,
@@ -477,62 +492,56 @@ function SurahPickerModal({
   onSelect: (surah: number) => void;
   onClose: () => void;
 }) {
-  const backgroundColor = useThemeColor({}, 'background');
-  const cardColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-  const textColor = useThemeColor({}, 'text');
-  const mutedColor = useThemeColor({}, 'mutedForeground');
-  const tintColor = useThemeColor({}, 'tint');
-
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-        <View style={[styles.pickerModalContent, { backgroundColor: cardColor }]}>
-          <View style={[styles.pickerHeader, { borderBottomColor: borderColor }]}>
-            <ThemedText style={styles.pickerHeaderTitle}>Select Surah</ThemedText>
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={textColor} />
+      <View style={styles.modalOverlay}>
+        <GlassSheet>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerEyebrow}>SURAH</Text>
+              <Text style={styles.headerTitle}>Select surah</Text>
+            </View>
+            <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8}>
+              <Ionicons name="close" size={22} color={GlassTheme.ink} />
             </Pressable>
           </View>
-          <ScrollView style={styles.pickerScrollView} showsVerticalScrollIndicator={true}>
-            {surahs.map((surah) => (
-              <Pressable
-                key={surah.surah}
-                onPress={() => onSelect(surah.surah)}
-                style={[
-                  styles.surahPickerItem,
-                  {
-                    backgroundColor: selectedSurah === surah.surah ? `${tintColor}15` : 'transparent',
-                    borderLeftColor: selectedSurah === surah.surah ? tintColor : 'transparent',
-                  },
-                ]}
-              >
-                <View style={styles.surahPickerItemContent}>
-                  <View style={styles.surahPickerItemLeft}>
-                    <ThemedText style={[styles.surahPickerNumber, { color: tintColor }]}>
-                      {surah.surah}
-                    </ThemedText>
-                    <View style={styles.surahPickerItemText}>
-                      <ThemedText style={styles.surahPickerName}>{surah.name}</ThemedText>
-                      <ThemedText style={[styles.surahPickerAyahCount, { color: mutedColor }]}>
-                        {surah.ayahCount} ayahs
-                      </ThemedText>
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {surahs.map((surah) => {
+              const active = selectedSurah === surah.surah;
+              return (
+                <Pressable
+                  key={surah.surah}
+                  onPress={() => onSelect(surah.surah)}
+                  style={[styles.surahPickerItem, active && styles.surahPickerItemActive]}
+                >
+                  <View style={styles.surahPickerItemContent}>
+                    <View style={styles.surahPickerItemLeft}>
+                      <Text style={styles.surahPickerNumber}>{surah.surah}</Text>
+                      <View style={styles.surahPickerItemText}>
+                        <Text style={styles.surahPickerName}>{surah.name}</Text>
+                        <Text style={styles.surahPickerAyahCount}>
+                          {surah.ayahCount} ayahs
+                        </Text>
+                      </View>
                     </View>
+                    {active && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color={GlassTheme.primary}
+                      />
+                    )}
                   </View>
-                  {selectedSurah === surah.surah && (
-                    <Ionicons name="checkmark-circle" size={24} color={tintColor} />
-                  )}
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
           </ScrollView>
-        </View>
+        </GlassSheet>
       </View>
     </Modal>
   );
 }
 
-// Ayah Picker Modal Component
 function AyahPickerModal({
   visible,
   surah,
@@ -548,59 +557,54 @@ function AyahPickerModal({
   onSelect: (ayah: number) => void;
   onClose: () => void;
 }) {
-  const cardColor = useThemeColor({}, 'card');
-  const borderColor = useThemeColor({}, 'border');
-  const textColor = useThemeColor({}, 'text');
-  const mutedColor = useThemeColor({}, 'mutedForeground');
-  const tintColor = useThemeColor({}, 'tint');
   const surahInfo = quranRangeService.getSurahInfo(surah);
-
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-        <View style={[styles.pickerModalContent, { backgroundColor: cardColor }]}>
-          <View style={[styles.pickerHeader, { borderBottomColor: borderColor }]}>
+      <View style={styles.modalOverlay}>
+        <GlassSheet>
+          <View style={styles.header}>
             <View>
-              <ThemedText style={styles.pickerHeaderTitle}>Select Ayah</ThemedText>
+              <Text style={styles.headerEyebrow}>AYAH</Text>
+              <Text style={styles.headerTitle}>Select ayah</Text>
               {surahInfo && (
-                <ThemedText style={[styles.pickerHeaderSubtitle, { color: mutedColor }]}>
+                <Text style={styles.headerSubtitle}>
                   {surahInfo.name} ({surah})
-                </ThemedText>
+                </Text>
               )}
             </View>
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={textColor} />
+            <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8}>
+              <Ionicons name="close" size={22} color={GlassTheme.ink} />
             </Pressable>
           </View>
-          <ScrollView 
-            style={styles.pickerScrollView} 
+          <ScrollView
+            style={styles.scrollView}
             contentContainerStyle={styles.ayahPickerGrid}
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
           >
-            {ayahs.map((ayah) => (
-              <Pressable
-                key={ayah}
-                onPress={() => onSelect(ayah)}
-                style={[
-                  styles.ayahPickerItem,
-                  {
-                    backgroundColor: selectedAyah === ayah ? tintColor : 'transparent',
-                    borderColor: selectedAyah === ayah ? tintColor : borderColor,
-                  },
-                ]}
-              >
-                <ThemedText
+            {ayahs.map((ayah) => {
+              const active = selectedAyah === ayah;
+              return (
+                <Pressable
+                  key={ayah}
+                  onPress={() => onSelect(ayah)}
                   style={[
-                    styles.ayahPickerItemText,
-                    { color: selectedAyah === ayah ? '#fff' : textColor },
+                    styles.ayahPickerItem,
+                    active && styles.ayahPickerItemActive,
                   ]}
                 >
-                  {ayah}
-                </ThemedText>
-              </Pressable>
-            ))}
+                  <Text
+                    style={[
+                      styles.ayahPickerItemText,
+                      active && styles.ayahPickerItemTextActive,
+                    ]}
+                  >
+                    {ayah}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </ScrollView>
-        </View>
+        </GlassSheet>
       </View>
     </Modal>
   );
@@ -610,146 +614,279 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(28,30,20,0.45)',
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    maxHeight: '92%',
     minHeight: '70%',
     flexDirection: 'column',
+    shadowColor: 'rgba(60,40,10,1)',
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 12,
+  },
+  sheetContent: {
+    flex: 1,
+    paddingTop: 6,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+    alignItems: 'flex-end',
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 14,
+  },
+  headerEyebrow: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    color: GlassTheme.inkSubtle,
+    marginBottom: 2,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontFamily: GlassFonts.display,
+    fontSize: 28,
+    fontWeight: '500',
+    color: GlassTheme.ink,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: GlassTheme.inkMuted,
+    marginTop: 4,
   },
   closeButton: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeSelectorWrap: {
+    paddingHorizontal: 24,
+    paddingBottom: 4,
   },
   modeSelector: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 8,
+    gap: 6,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: 'rgba(74,93,58,0.08)',
   },
   modeButton: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingVertical: 9,
+    borderRadius: 10,
     alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   modeButtonText: {
     fontSize: 13,
     fontWeight: '600',
+    color: GlassTheme.inkMuted,
   },
-  scrollView: {
-    flex: 1,
+  modeButtonTextActive: {
+    color: GlassTheme.primary,
   },
+  scrollView: { flex: 1 },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingTop: 12,
     paddingBottom: 24,
   },
   rangeSection: {
-    marginBottom: 12,
-  },
-  rangeSectionCompact: {
-    marginBottom: 5,
+    marginBottom: 18,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
-    marginBottom: 12,
-  },
-  sectionTitleCompact: {
-    marginBottom: 1,
+    letterSpacing: 0.8,
+    color: GlassTheme.inkSubtle,
+    marginBottom: 10,
   },
   inputRow: {
-    marginBottom: 16,
+    gap: 6,
   },
   fromToRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    gap: 10,
   },
-  fromToRowCompact: {
-    marginBottom: 8,
-  },
-  fromToField: {
-    flex: 1,
-  },
+  fromToField: { flex: 1.4 },
+  ayahFieldWrap: { flex: 1 },
   label: {
-    fontSize: 12,
-    marginBottom: 8,
+    fontSize: 11,
+    color: GlassTheme.inkSubtle,
+    marginBottom: 6,
+    fontWeight: '500',
   },
   numberInput: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 15,
+    height: 48,
+    borderWidth: 0.5,
+    borderColor: GlassTheme.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: GlassTheme.ink,
     textAlign: 'center',
+    fontWeight: '600',
+  },
+  ayahDisplay: {
+    fontSize: 12,
+    color: GlassTheme.inkMuted,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   pickerButton: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-    minHeight: 44,
+    minHeight: 56,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 0.5,
+    borderColor: GlassTheme.cardBorder,
+    justifyContent: 'center',
   },
   pickerButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
   },
-  pickerButtonTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
+  pickerButtonTextContainer: { flex: 1, minWidth: 0 },
   pickerButtonNumber: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontFamily: GlassFonts.display,
+    fontSize: 18,
+    color: GlassTheme.ink,
+    fontWeight: '500',
+    letterSpacing: -0.3,
   },
   pickerButtonName: {
     fontSize: 12,
+    color: GlassTheme.inkMuted,
+    marginTop: 1,
   },
-  pickerModalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    minHeight: '60%',
-  },
-  pickerHeader: {
+  stepper: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 0.5,
+    borderColor: GlassTheme.cardBorder,
+    overflow: 'hidden',
   },
-  pickerHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  stepperBtn: {
+    width: 38,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pickerHeaderSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  pickerScrollView: {
+  stepperValue: {
     flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderColor: GlassTheme.line,
   },
+  stepperValueText: {
+    fontFamily: GlassFonts.display,
+    fontSize: 22,
+    fontWeight: '500',
+    color: GlassTheme.ink,
+    letterSpacing: -0.3,
+  },
+  summary: {
+    marginTop: 8,
+    padding: 18,
+    borderRadius: 18,
+    alignItems: 'center',
+    backgroundColor: GlassTheme.primarySoft,
+    borderWidth: 0.5,
+    borderColor: 'rgba(74,93,58,0.25)',
+    gap: 4,
+  },
+  summaryEyebrow: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    color: GlassTheme.primary,
+    marginBottom: 6,
+  },
+  summaryDisplay: {
+    fontFamily: GlassFonts.display,
+    fontSize: 20,
+    fontWeight: '500',
+    color: GlassTheme.ink,
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  summaryArrow: {
+    color: GlassTheme.inkSubtle,
+    fontSize: 16,
+    marginVertical: 2,
+  },
+  footer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 28,
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: GlassTheme.line,
+  },
+  secondaryBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: GlassTheme.primarySoft,
+  },
+  secondaryBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: GlassTheme.primary,
+  },
+  primaryBtnWrap: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  primaryBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+
+  // Surah picker list
   surahPickerItem: {
-    borderLeftWidth: 4,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: GlassTheme.line,
+  },
+  surahPickerItemActive: {
+    backgroundColor: GlassTheme.primarySoft,
   },
   surahPickerItemContent: {
     flexDirection: 'row',
@@ -762,105 +899,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   surahPickerNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    width: 40,
+    fontFamily: GlassFonts.display,
+    fontSize: 22,
+    fontWeight: '500',
+    color: GlassTheme.primary,
+    width: 44,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   surahPickerItemText: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
   },
   surahPickerName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    color: GlassTheme.ink,
     marginBottom: 2,
   },
   surahPickerAyahCount: {
     fontSize: 12,
+    color: GlassTheme.inkMuted,
   },
+
+  // Ayah picker grid
   ayahPickerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 12,
+    padding: 18,
     gap: 8,
-    justifyContent: 'flex-start',
   },
   ayahPickerItem: {
-    width: '18%',
-    minWidth: 60,
-    maxWidth: 80,
+    width: 56,
     height: 50,
-    borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 0.5,
+    borderColor: GlassTheme.cardBorder,
+  },
+  ayahPickerItemActive: {
+    backgroundColor: GlassTheme.primary,
+    borderColor: GlassTheme.primary,
   },
   ayahPickerItemText: {
     fontSize: 14,
     fontWeight: '600',
+    color: GlassTheme.ink,
   },
-  surahPicker: {
-    maxHeight: 200,
-  },
-  surahButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginRight: 8,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  surahButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  surahName: {
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  ayahDisplay: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  summary: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  summaryTitle: {
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  footer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-    borderTopWidth: 1,
-  },
-  footerButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  footerButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  ayahPickerItemTextActive: { color: '#fff' },
+
   loadingText: {
     marginTop: 12,
     fontSize: 14,
+    color: GlassTheme.inkMuted,
+    textAlign: 'center',
   },
 });
-

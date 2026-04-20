@@ -35,7 +35,7 @@ const SPACEWIDTH = 100;
 const HORIZONTAL_PADDING = 4;
 
 // Word interaction modes
-export type WordInteractionMode = 'tooltip' | 'marking';
+export type WordInteractionMode = 'tooltip' | 'marking' | 'none';
 
 // Word marking types (cycle order: none → tajweed → tasheel → hifz → corrected → none)
 export type WordMarkingType = 'tajweed' | 'tasheel' | 'hifz' | 'corrected';
@@ -59,7 +59,7 @@ interface QuranPageProps {
   bottomPadding?: number;
   interactionMode?: WordInteractionMode;
   wordMarkings?: Map<string, WordMarkingType>;
-  onWordMarkingChange?: (wordKey: string, marking: WordMarkingType | null) => void;
+  onWordMarkingChange?: (wordKey: string, marking: WordMarkingType | null, wordText?: string) => void;
 }
 
 interface TooltipState {
@@ -213,9 +213,9 @@ if (!isExpoGo) {
     
     // Use external markings if provided, otherwise use internal state
     const wordMarkings = externalWordMarkings ?? internalWordMarkings;
-    const setWordMarking = useCallback((wordKey: string, marking: WordMarkingType | null) => {
+    const setWordMarking = useCallback((wordKey: string, marking: WordMarkingType | null, wordText?: string) => {
       if (onWordMarkingChange) {
-        onWordMarkingChange(wordKey, marking);
+        onWordMarkingChange(wordKey, marking, wordText);
       } else {
         setInternalWordMarkings(prev => {
           const newMap = new Map(prev);
@@ -270,6 +270,14 @@ if (!isExpoGo) {
       const maxWidth = pageWidth * 2;
       const allWordRects: WordRect[] = [];
 
+      // Scale interline down so all lines fit within contentHeight (prevents last
+      // lines from sliding under the bottom dock).
+      const numLines = pageText.length;
+      const rawTotalHeight = numLines * layout.interline;
+      const fitInterline = rawTotalHeight > layout.contentHeight
+        ? layout.contentHeight / (numLines + 0.3)
+        : layout.interline;
+
       // Starting y position - add topPadding to offset from the header
       let yPos = topPadding + (-layout.ascendant + (200 * layout.scale));
 
@@ -278,11 +286,11 @@ if (!isExpoGo) {
         
         // Special positioning for first two pages
         if ((pageIndex === 0 || pageIndex === 1) && lineIndex === 1) {
-          yPos = topPadding + (3 * layout.interline);
+          yPos = topPadding + (3 * fitInterline);
         }
-        
+
         const currentYPos = yPos;
-        yPos += layout.interline;
+        yPos += fitInterline;
 
         const lineTextInfo = analyzeText(lineText);
         
@@ -386,49 +394,45 @@ if (!isExpoGo) {
           xPos = -(maxWidth - pageWidth + effectiveMargin);
         }
 
-        // Calculate word rectangles for this line by measuring each word
-        // For RTL text, we start from the right edge and work left
-        const lineHeight = layout.interline;
-        
-        // Calculate where the text starts on screen (right edge for RTL)
-        const lineRightEdge = pageWidth - effectiveMargin;
-        
-        // Measure each word and calculate positions
-        let currentX = lineRightEdge; // Start from right for RTL
-        
+        // Derive exact word positions from the already-laid-out paragraph.
+        // getRectsForRange uses the same glyph metrics as the render pass, so
+        // highlights stay perfectly aligned even with justification features.
+        let charOffset = 0;
         for (let wi = 0; wi < lineTextInfo.wordInfos.length; wi++) {
           const wordInfo = lineTextInfo.wordInfos[wi];
           if (!wordInfo) continue;
-          
-          // Measure this word's width
-          const wordBuilder = Skia.ParagraphBuilder.Make(lineParStyle, fontMgr);
-          wordBuilder.pushStyle(textStyle);
-          wordBuilder.addText(wordInfo.text);
-          wordBuilder.pop();
-          const wordPara = wordBuilder.build();
-          wordPara.layout(maxWidth);
-          const wordWidth = wordPara.getLongestLine();
-          wordPara.dispose();
-          
-          // Calculate word position (RTL: subtract width from current position)
-          const wordX = currentX - wordWidth;
-          
-          allWordRects.push({
-            x: wordX,
-            y: currentYPos,
-            width: wordWidth,
-            height: lineHeight,
-            wordIndex: wi,
-            lineIndex,
-            wordText: wordInfo.text,
-          });
-          
-          // Move left for next word (add space width)
-          const spaceType = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
-          const spaceWidth = spaceType !== undefined 
-            ? (spaceType === SpaceType.Aya ? justResult.ayaSpacing : justResult.simpleSpacing) * scale
-            : 0;
-          currentX = wordX - spaceWidth;
+
+          const wordLen = wordInfo.endIndex - wordInfo.startIndex + 1;
+
+          // 0 = RectHeightStyle.Tight, 0 = RectWidthStyle.Tight
+          // react-native-skia returns either SkRect[] or {rect,dir}[] depending on version;
+          // normalise to {x,width} before use.
+          const rawRects: unknown[] = paragraph.getRectsForRange(charOffset, charOffset + wordLen, 0, 0);
+          const rects = rawRects.map((r: any) =>
+            r && typeof r.x === 'number' ? r : r?.rect
+          ).filter(Boolean) as Array<{ x: number; y: number; width: number; height: number }>;
+
+          if (rects.length > 0) {
+            let minX = Infinity, maxX = -Infinity;
+            for (const r of rects) {
+              minX = Math.min(minX, r.x);
+              maxX = Math.max(maxX, r.x + r.width);
+            }
+            allWordRects.push({
+              x: xPos + minX,
+              y: currentYPos,
+              width: maxX - minX,
+              height: fitInterline,
+              wordIndex: wi,
+              lineIndex,
+              wordText: wordInfo.text,
+            });
+          }
+
+          // Advance past word characters + optional trailing space
+          charOffset += wordLen;
+          const hasSpace = lineTextInfo.spaces.get(wordInfo.endIndex + 1);
+          if (hasSpace !== undefined) charOffset += 1;
         }
 
         return {
@@ -444,8 +448,9 @@ if (!isExpoGo) {
 
     // Handle tap on canvas
     const handlePress = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
+      if (interactionMode === 'none') return;
       const { locationX, locationY } = event.nativeEvent;
-      
+
       // Find the word at this position
       for (const rect of wordRects) {
         if (
@@ -455,7 +460,7 @@ if (!isExpoGo) {
           locationY <= rect.y + rect.height
         ) {
           const wordKey = getWordKey(pageIndex, rect.lineIndex, rect.wordIndex);
-          
+
           if (interactionMode === 'marking') {
             // Marking mode: cycle through marking states
             const currentMarking = wordMarkings.get(wordKey) ?? null;
@@ -463,8 +468,7 @@ if (!isExpoGo) {
             const nextIndex = (currentIndex + 1) % MARKING_CYCLE.length;
             const nextMarking = MARKING_CYCLE[nextIndex] ?? null;
             
-            console.log(`Word "${rect.wordText}": ${currentMarking ?? 'none'} → ${nextMarking ?? 'none'}`);
-            setWordMarking(wordKey, nextMarking);
+            setWordMarking(wordKey, nextMarking, rect.wordText);
           } else {
             // Tooltip mode: show tooltip
             const adjustedY = rect.y + rect.height * 0.7;
