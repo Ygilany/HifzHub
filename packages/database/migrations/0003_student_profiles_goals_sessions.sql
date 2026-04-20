@@ -4,15 +4,8 @@ ALTER TABLE "users" ADD COLUMN "phone" varchar(20);
 ALTER TABLE "users" ADD COLUMN "alternate_phone" varchar(20);
 --> statement-breakpoint
 
--- Create student_parents relationship table
-CREATE TABLE "student_parents" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"student_id" uuid NOT NULL,
-	"parent_id" uuid NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
+-- NOTE: student_parents was already created in 0001_polite_yellowjacket.sql
+-- (duplicate CREATE TABLE removed to prevent failure on fresh databases)
 
 -- Create enums for goals
 DO $$ BEGIN
@@ -105,12 +98,6 @@ CREATE TABLE "sessions" (
 );
 --> statement-breakpoint
 
--- Add foreign key constraints for student_parents
-ALTER TABLE "student_parents" ADD CONSTRAINT "student_parents_student_id_users_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "student_parents" ADD CONSTRAINT "student_parents_parent_id_users_id_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
---> statement-breakpoint
-
 -- Add foreign key constraint for student_profiles
 ALTER TABLE "student_profiles" ADD CONSTRAINT "student_profiles_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
@@ -129,14 +116,6 @@ ALTER TABLE "sessions" ADD CONSTRAINT "sessions_teacher_id_users_id_fk" FOREIGN 
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_class_id_classes_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."classes"("id") ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 
--- Create indexes for student_parents
-CREATE INDEX "student_parent_unique" ON "student_parents" USING btree ("student_id","parent_id");
---> statement-breakpoint
-CREATE INDEX "student_parents_parent_id_idx" ON "student_parents" USING btree ("parent_id");
---> statement-breakpoint
-CREATE INDEX "student_parents_student_id_idx" ON "student_parents" USING btree ("student_id");
---> statement-breakpoint
-
 -- Create indexes for sessions
 CREATE INDEX "sessions_student_id_idx" ON "sessions" USING btree ("student_id");
 --> statement-breakpoint
@@ -149,4 +128,3 @@ CREATE INDEX "sessions_date_idx" ON "sessions" USING btree ("session_date");
 CREATE INDEX "student_goals_student_id_idx" ON "student_goals" USING btree ("student_id");
 --> statement-breakpoint
 CREATE INDEX "student_goals_type_idx" ON "student_goals" USING btree ("type");
---> statement-breakpoint
