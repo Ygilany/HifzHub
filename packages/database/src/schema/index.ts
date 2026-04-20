@@ -6,4 +6,6 @@ export * from "./student-profiles";
 export * from "./goals";
 export * from "./sessions";
 export * from "./assignments";
+export * from "./announcements";
+export * from "./word-mistakes";
 
